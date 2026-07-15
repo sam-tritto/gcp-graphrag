@@ -299,6 +299,20 @@ def sync_source(driver, source_key, source_name, url, exam_id, all_services, is_
     print(f"Successfully synchronized metadata hash state for '{source_name}' (Exam: {exam_id})!")
     return True
 
+def purge_inactive_users(driver):
+    """Deletes temporary portfolio user profiles older than 14 days."""
+    query = """
+    MATCH (u:User)
+    // Find users whose last active timestamp is older than 14 days
+    WHERE u.last_active < timestamp() - (14 * 24 * 60 * 60 * 1000)
+    // Detach deletes the user and all their HAS_MASTERY relationships
+    DETACH DELETE u
+    """
+    with driver.session() as session:
+        result = session.run(query)
+        summary = result.consume()
+        print(f"🧹 Successfully purged {summary.counters.nodes_deleted} inactive test profiles.")
+
 def run_pipeline():
     """Main orchestrator for multi-exam document delta sync checks and Neo4j imports."""
     print("Initializing GCP Exam GraphRAG Ingestion & Sync Pipeline (Multi-Exam Model)...")
@@ -334,7 +348,6 @@ def run_pipeline():
             
             # Determine source names/keys
             if is_pdf:
-                # Extract clean name from PDF URL
                 # e.g. "altostrat_media_case_study"
                 name_match = re.search(r'pca_([a-z0-9_]+)_case_study', doc_url)
                 if name_match:
@@ -358,6 +371,9 @@ def run_pipeline():
             
     # 3. Validate and enforce vector search index
     ensure_vector_index(driver)
+    
+    # 4. Automatically purge inactive users (older than 14 days)
+    purge_inactive_users(driver)
     
     driver.close()
     print("\nMulti-Exam database delta-sync processes finished.")

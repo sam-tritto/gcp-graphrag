@@ -232,3 +232,110 @@ def ensure_vector_index(driver):
         print("Neo4j Vector index 'gcp_exam_embeddings' verified/created.")
     except Exception as e:
         print(f"Vector index verified (or already exists): {e}")
+
+class UserStateController:
+    def __init__(self, driver):
+        self.driver = driver
+
+    def touch_user(self, user_id: str):
+        """Ensures the User node exists and updates their last_active timestamp."""
+        query = """
+        MERGE (u:User {id: $user_id})
+        SET u.last_active = timestamp()
+        """
+        with self.driver.session() as session:
+            session.run(query, user_id=user_id)
+
+    def update_mastery(self, user_id: str, node_name: str, passed: bool):
+        """Updates Thompson sampling parameters based on quiz results."""
+        self.touch_user(user_id)
+        query = """
+        MATCH (u:User {id: $user_id})
+        MATCH (n) WHERE (n:Service OR n:Domain) AND n.name = $node_name
+        MERGE (u)-[r:HAS_MASTERY]->(n)
+        ON CREATE SET r.alpha = 1, r.beta = 1
+        SET r.alpha = r.alpha + CASE WHEN $passed = false THEN 1 ELSE 0 END,
+            r.beta = r.beta + CASE WHEN $passed = true THEN 1 ELSE 0 END
+        """
+        with self.driver.session() as session:
+            session.run(query, user_id=user_id, node_name=node_name, passed=passed)
+
+    def reset_single_node(self, user_id: str, node_name: str):
+        """Level 1: Reset a single service or domain node back to default priors."""
+        self.touch_user(user_id)
+        query = """
+        MATCH (u:User {id: $user_id})-[r:HAS_MASTERY]->(n)
+        WHERE n.name = $node_name
+        SET r.alpha = 1, r.beta = 1
+        """
+        with self.driver.session() as session:
+            session.run(query, user_id=user_id, node_name=node_name)
+
+    def reset_entire_exam(self, user_id: str, exam_id: str):
+        """Level 2: Reset all nodes mapped to a specific Google certification."""
+        self.touch_user(user_id)
+        query = """
+        MATCH (u:User {id: $user_id})-[r:HAS_MASTERY]->(target)
+        WHERE (target:Service OR target:Domain)
+        AND (
+            EXISTS {
+                MATCH (e:Exam {id: $exam_id})-[:HAS_DOMAIN]->(target)
+            } OR EXISTS {
+                MATCH (e:Exam {id: $exam_id})-[:REQUIRES_SERVICE]->(target)
+            }
+        )
+        SET r.alpha = 1, r.beta = 1
+        """
+        with self.driver.session() as session:
+            session.run(query, user_id=user_id, exam_id=exam_id)
+
+    def reset_global_profile(self, user_id: str):
+        """Level 3: Reset the entire student profile back to a blank slate."""
+        self.touch_user(user_id)
+        query = """
+        MATCH (u:User {id: $user_id})-[r:HAS_MASTERY]->()
+        DELETE r
+        """
+        with self.driver.session() as session:
+            session.run(query, user_id=user_id)
+
+    def get_user_mastery_stats(self, user_id: str, exam_id: str):
+        """Retrieves alpha and beta values for all services and domains of an exam."""
+        self.touch_user(user_id)
+        query = """
+        MATCH (e:Exam {id: $exam_id})
+        OPTIONAL MATCH (e)-[:HAS_DOMAIN]->(d:Domain)
+        OPTIONAL MATCH (d)-[:TESTS_KNOWLEDGE_OF]->(s:Service)
+        WITH DISTINCT d, s
+        MATCH (u:User {id: $user_id})
+        OPTIONAL MATCH (u)-[rd:HAS_MASTERY]->(d)
+        OPTIONAL MATCH (u)-[rs:HAS_MASTERY]->(s)
+        RETURN 
+            d.name AS domain_name, 
+            rd.alpha AS domain_alpha, 
+            rd.beta AS domain_beta,
+            s.name AS service_name,
+            rs.alpha AS service_alpha,
+            rs.beta AS service_beta
+        """
+        with self.driver.session() as session:
+            result = session.run(query, user_id=user_id, exam_id=exam_id)
+            stats = {
+                "domains": {},
+                "services": {}
+            }
+            for record in result:
+                d_name = record["domain_name"]
+                if d_name:
+                    stats["domains"][d_name] = {
+                        "alpha": record["domain_alpha"] if record["domain_alpha"] is not None else 1,
+                        "beta": record["domain_beta"] if record["domain_beta"] is not None else 1
+                    }
+                s_name = record["service_name"]
+                if s_name:
+                    stats["services"][s_name] = {
+                        "alpha": record["service_alpha"] if record["service_alpha"] is not None else 1,
+                        "beta": record["service_beta"] if record["service_beta"] is not None else 1
+                    }
+            return stats
+
