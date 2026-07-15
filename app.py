@@ -276,12 +276,18 @@ def get_query_embedding(query_text):
 
 # Core retrieval method using Neo4j-graphrag with fallback logic
 def retrieve_graphrag_context(driver, query_text, exam_id):
+    try:
+        query_embedding = get_query_embedding(query_text)
+    except Exception as e:
+        st.sidebar.error(f"Embedding generation failed: {e}")
+        return []
+
     # Try using Neo4j GraphRAG's VectorRetriever with filters
     try:
         retriever = VectorRetriever(driver, index_name="gcp_exam_embeddings")
         # Apply filters to restrict retrieval search space to the selected exam
         retrieval_results = retriever.search(
-            query_text=query_text, 
+            query_vector=query_embedding, 
             top_k=3,
             filters={"source_exam": exam_id}
         )
@@ -314,7 +320,6 @@ def retrieve_graphrag_context(driver, query_text, exam_id):
         print(f"VectorRetriever failed: {e}. Falling back to Cypher vector search...")
         
     try:
-        query_embedding = get_query_embedding(query_text)
         cypher_query = """
         CALL db.index.vector.queryNodes('gcp_exam_embeddings', 50, $embedding)
         YIELD node, score
