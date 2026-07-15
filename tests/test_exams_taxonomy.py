@@ -6,15 +6,18 @@ def test_all_certification_bbn_models():
     """Verify that every certification config compiles successfully into a BBN model."""
     for exam_id, config in GCP_EXAMS.items():
         blueprint_records = []
-        for domain, services in config["domains"].items():
-            blueprint_records.append({
-                "domain": domain,
-                "services": services
-            })
+        for domain, service_data in config["domains"].items():
+            for service, subconcepts in service_data.items():
+                blueprint_records.append({
+                    "domain": domain,
+                    "service": service,
+                    "subconcepts": subconcepts
+                })
             
         user_stats = {
             "domains": {d: {"alpha": 1, "beta": 1} for d in config["domains"]},
-            "services": {s: {"alpha": 1, "beta": 1} for d in config["domains"] for s in config["domains"][d]}
+            "services": {s: {"alpha": 1, "beta": 1} for d in config["domains"] for s in config["domains"][d]},
+            "subconcepts": {sub: {"alpha": 1, "beta": 1} for d in config["domains"] for s in config["domains"][d] for sub in config["domains"][d][s]}
         }
         
         model, latent_nodes, candidate_questions = build_bayesian_model(blueprint_records, user_stats)

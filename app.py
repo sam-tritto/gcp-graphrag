@@ -361,16 +361,17 @@ def retrieve_third_tier_context(driver, exam_id, chunk_uids):
     MATCH (c:Chunk)-[:DISCUSSES]->(s:Service)
     WHERE c.uid IN $chunk_uids
     
-    // Pattern 1: Service outgoing relations (e.g. BEST_FOR, CONFIGURED_BY, GUARANTEES, USED_FOR)
+    // Pattern 1: Service outgoing relations (e.g. BEST_FOR, CONFIGURED_BY, GUARANTEES, USED_FOR, PREFERABLE_OVER)
     OPTIONAL MATCH (s)-[r_out]->(leaf_out)
     WHERE NOT leaf_out:Domain AND NOT leaf_out:Exam AND NOT leaf_out:Chunk
     
-    // Pattern 2: Incoming relations to Service (e.g. CaseStudy -SOLVED_BY-> Service, HierarchyNode -PARENT_OF-> Service, Format -INGESTED_TO-> Service)
+    // Pattern 2: Incoming relations to Service
     OPTIONAL MATCH (leaf_in)-[r_in]->(s)
     WHERE NOT leaf_in:Domain AND NOT leaf_in:Exam AND NOT leaf_in:Chunk
     
     RETURN s.name AS service, 
            type(r_out) AS rel_out, labels(leaf_out)[0] AS label_out, coalesce(leaf_out.description, leaf_out.syntax, leaf_out.name) AS val_out,
+           r_out.condition AS r_out_cond, r_out.reason AS r_out_reason,
            type(r_in) AS rel_in, labels(leaf_in)[0] AS label_in, coalesce(leaf_in.description, leaf_in.syntax, leaf_in.name) AS val_in
     """
     
@@ -383,7 +384,12 @@ def retrieve_third_tier_context(driver, exam_id, chunk_uids):
                 
                 # Outgoing relationship
                 if record["rel_out"] and record["label_out"] and record["val_out"]:
-                    lines.add(f"GCP Architectural Knowledge: ({service}) -[:{record['rel_out']}]-> ({record['label_out']}: \"{record['val_out']}\")")
+                    if record["rel_out"] == "PREFERABLE_OVER":
+                        cond = record["r_out_cond"]
+                        reason = record["r_out_reason"]
+                        lines.add(f"GCP Architectural Decision Boundary: Prefer ({service}) over ({record['val_out']}) when: '{cond}' (Reason: {reason})")
+                    else:
+                        lines.add(f"GCP Architectural Knowledge: ({service}) -[:{record['rel_out']}]-> ({record['label_out']}: \"{record['val_out']}\")")
                 
                 # Incoming relationship
                 if record["rel_in"] and record["label_in"] and record["val_in"]:
@@ -554,8 +560,12 @@ with st.sidebar:
     # Fallback to local static registry representation if database holds no records yet
     if not blueprint_loaded:
         local_config = GCP_EXAMS[target_exam_id]
-        for domain, services in local_config.get("domains", {}).items():
-            tags_html = "".join([f'<span class="service-tag">{s}</span>' for s in services])
+        for domain, service_data in local_config.get("domains", {}).items():
+            if isinstance(service_data, list):
+                services = service_data
+            else:
+                services = list(service_data.keys())
+            tags_html = "".join([f'<span class="service-tag">{s}</span>' for s in services if s])
             st.markdown(f"""
             <div class="blueprint-card">
                 <div class="blueprint-domain">📘 {domain}</div>
@@ -726,25 +736,48 @@ with tab_quiz:
             # 1. Fetch user stats
             user_stats = state_controller.get_user_mastery_stats(st.session_state.user_id, target_exam_id)
             
-            # 2. Fetch blueprint domains and services
+            # 2. Fetch blueprint domains, services, and subconcepts
             blueprint_records = []
             try:
                 query = """
                 MATCH (e:Exam {id: $exam_id})-[:HAS_DOMAIN]->(d:Domain)
                 OPTIONAL MATCH (d)-[:TESTS_KNOWLEDGE_OF]->(s:Service)
-                RETURN d.name AS domain, collect(s.name) AS services
-                ORDER BY d.name
+                OPTIONAL MATCH (s)-[:HAS_SUBCONCEPT]->(sub:SubConcept)
+                RETURN d.name AS domain, s.name AS service, collect(sub.name) AS subconcepts
+                ORDER BY d.name, s.name
                 """
                 with driver.session() as session:
                     res = session.run(query, exam_id=target_exam_id)
-                    blueprint_records = [{"domain": r["domain"], "services": r["services"]} for r in res]
-            except Exception:
-                pass
+                    blueprint_records = []
+                    for r in res:
+                        if r["service"]:
+                            blueprint_records.append({
+                                "domain": r["domain"],
+                                "service": r["service"],
+                                "subconcepts": r["subconcepts"]
+                            })
+            except Exception as e:
+                print(f"Error fetching database blueprint: {e}")
                 
             if not blueprint_records:
                 # Fallback local config
                 local_config = GCP_EXAMS[target_exam_id]
-                blueprint_records = [{"domain": d, "services": s} for d, s in local_config.get("domains", {}).items()]
+                blueprint_records = []
+                for domain, services_dict in local_config.get("domains", {}).items():
+                    if isinstance(services_dict, list):
+                        for s in services_dict:
+                            blueprint_records.append({
+                                "domain": domain,
+                                "service": s,
+                                "subconcepts": [s]
+                            })
+                    else:
+                        for s, subconcepts in services_dict.items():
+                            blueprint_records.append({
+                                "domain": domain,
+                                "service": s,
+                                "subconcepts": subconcepts
+                            })
                 
             # 3. Build Bayesian model
             try:
@@ -755,10 +788,10 @@ with tab_quiz:
                 
             # 4. Count total answered questions across the exam
             total_answered = 0
-            if user_stats and user_stats.get("services"):
+            if user_stats and user_stats.get("subconcepts"):
                 total_answered = sum(
                     s_stats.get("alpha", 1) + s_stats.get("beta", 1) - 2 
-                    for s_stats in user_stats.get("services", {}).values()
+                    for s_stats in user_stats.get("subconcepts", {}).values()
                 )
                 
         # Calculate current network entropy and certainty
@@ -871,23 +904,23 @@ with tab_quiz:
         if not st.session_state.quiz_active:
             st.markdown("Ready for your next question? Click the button below to generate a tailored challenge.")
             if st.button("🚀 Generate Next Adaptive Question", key="quiz_generate_btn"):
-                with st.spinner("Selecting target topic and generating grounded question..."):
-                    # 1. Select the next Service
+                with st.spi                    # 1. Select the next SubConcept
+                    subconcept_name = None
                     service_name = None
                     if is_diagnostic and inference and candidate_questions:
                         try:
-                            service_name = select_question_active_learning(
+                            # Returns best subconcept (without _Question suffix)
+                            subconcept_name = select_question_active_learning(
                                 bbn_model, inference, latent_nodes, candidate_questions
                             )
                         except Exception as e:
                             print(f"Error in active learning selection: {e}")
                             
-                    if not service_name:
+                    if not subconcept_name:
                         # Fallback/Tutoring Phase: Thompson Sampling
                         try:
                             # Domain selection
                             domain_stats = user_stats.get("domains", {})
-                            # Build domain stats map
                             domain_stats_map = {}
                             for record in blueprint_records:
                                 d = record["domain"]
@@ -895,33 +928,65 @@ with tab_quiz:
                             selected_domain, _ = select_domain_thompson_sampling(domain_stats_map)
                             
                             # Service selection within chosen domain
-                            domain_services = next(r["services"] for r in blueprint_records if r["domain"] == selected_domain)
-                            service_name = select_service_thompson_sampling(user_stats.get("services", {}), domain_services)
+                            services_in_domain = [r for r in blueprint_records if r["domain"] == selected_domain]
+                            service_names = []
+                            for r in services_in_domain:
+                                service_names.append(r["service"])
+                            service_name = select_service_thompson_sampling(user_stats.get("services", {}), service_names)
+                            
+                            # Subconcept selection under chosen service
+                            subconcepts_in_service = []
+                            for r in services_in_domain:
+                                if r.get("service") == service_name:
+                                    subconcepts_in_service.extend(r.get("subconcepts", []))
+                            if not subconcepts_in_service:
+                                subconcepts_in_service = [service_name]
+                                
+                            sub_stats = user_stats.get("subconcepts", {})
+                            sub_sampled_scores = {}
+                            for sub in subconcepts_in_service:
+                                stats = sub_stats.get(sub, {"alpha": 1, "beta": 1})
+                                alpha = stats.get("alpha", 1)
+                                beta = stats.get("beta", 1)
+                                sub_sampled_scores[sub] = np.random.beta(alpha, beta)
+                            subconcept_name = max(sub_sampled_scores, key=sub_sampled_scores.get)
                         except Exception as e:
                             print(f"Error in Thompson sampling selection: {e}")
-                            # Final absolute fallback: select first available service
-                            if blueprint_records and blueprint_records[0]["services"]:
-                                service_name = blueprint_records[0]["services"][0]
-                                
-                    if not service_name:
-                        st.error("Could not determine next service node. Please check your exam taxonomy.")
+                            # Final absolute fallback: select first available subconcept
+                            if blueprint_records:
+                                service_name = blueprint_records[0]["service"]
+                                if blueprint_records[0]["subconcepts"]:
+                                    subconcept_name = blueprint_records[0]["subconcepts"][0]
+                                else:
+                                    subconcept_name = service_name
+                                    
+                    # Resolve service name if not set
+                    if subconcept_name and not service_name:
+                        for record in blueprint_records:
+                            if subconcept_name in record.get("subconcepts", []):
+                                service_name = record["service"]
+                                break
+                        if not service_name:
+                            service_name = subconcept_name
+                            
+                    if not subconcept_name:
+                        st.error("Could not determine next subconcept node. Please check your exam taxonomy.")
                     else:
+                        st.session_state.quiz_subconcept = subconcept_name
                         st.session_state.quiz_service = service_name
                         
                         # Calculate Prior Mastery
-                        s_node = f"{service_name}_Service"
+                        sub_node = f"{subconcept_name}_SubConcept"
                         if inference:
                             try:
-                                prior_mastery = inference.query(variables=[s_node], show_progress=False).values[1]
+                                prior_mastery = inference.query(variables=[sub_node], show_progress=False).values[1]
                                 st.session_state.quiz_prior_mastery = float(prior_mastery)
                             except Exception:
                                 st.session_state.quiz_prior_mastery = 0.50
                         else:
                             st.session_state.quiz_prior_mastery = 0.50
                             
-
-                            
-                        # 3. Fetch context chunks from Neo4j (Fallback for dynamic generation)
+                        # 3. Fetch context chunks from Neo4j
                         context_chunks = []
                         try:
                             query = """
@@ -938,7 +1003,7 @@ with tab_quiz:
                             
                         if not context_chunks:
                             # Fallback vector search
-                            fallback_sources = retrieve_graphrag_context(driver, f"GCP {service_name} concepts", target_exam_id)
+                            fallback_sources = retrieve_graphrag_context(driver, f"GCP {subconcept_name} {service_name} concepts", target_exam_id)
                             context_chunks = [{"text": s["content"], "title": s["title"], "source": s["source"]} for s in fallback_sources]
                             
                         # Fetch third-tier links for this service specifically to help Gemini formulate scenario questions testing it.
@@ -948,17 +1013,22 @@ with tab_quiz:
                             MATCH (s:Service {name: $service_name})-[r]->(leaf)
                             WHERE NOT leaf:Domain AND NOT leaf:Exam AND NOT leaf:Chunk
                             RETURN type(r) AS rel_type, labels(leaf)[0] AS leaf_label, 
-                                   coalesce(leaf.description, leaf.syntax, leaf.name) AS leaf_value
+                                   coalesce(leaf.description, leaf.syntax, leaf.name, leaf.condition) AS leaf_value,
+                                   leaf.reason AS leaf_reason
                             UNION
                             MATCH (leaf)-[r]->(s:Service {name: $service_name})
                             WHERE NOT leaf:Domain AND NOT leaf:Exam AND NOT leaf:Chunk
                             RETURN type(r) AS rel_type, labels(leaf)[0] AS leaf_label, 
-                                   coalesce(leaf.description, leaf.syntax, leaf.name) AS leaf_value
+                                   coalesce(leaf.description, leaf.syntax, leaf.name, leaf.condition) AS leaf_value,
+                                   leaf.reason AS leaf_reason
                             """
                             with driver.session() as session:
                                 res_3rd = session.run(query_3rd, service_name=service_name)
                                 for r in res_3rd:
-                                    third_tier_info.append(f"({service_name}) -[:{r['rel_type']}]-> ({r['leaf_label']}: '{r['leaf_value']}')")
+                                    val_str = r['leaf_value']
+                                    if r['leaf_reason']:
+                                        val_str += f" (Reason: {r['leaf_reason']})"
+                                    third_tier_info.append(f"({service_name}) -[:{r['rel_type']}]-> ({r['leaf_label']}: '{val_str}')")
                         except Exception as e:
                             print(f"Failed to query 3rd-tier context for quiz service: {e}")
                             
@@ -968,7 +1038,7 @@ with tab_quiz:
                             context_str += "\n\n=== GCP STRUCTURAL BLUEPRINT RELATIONSHIPS ===\n" + "\n".join(third_tier_info)
                         prompt = f"""
                         You are a professional Google Cloud exam content creator and tutor.
-                        Based on the following authoritative documentation context, generate one high-quality multiple-choice question (MCQ) testing knowledge of the '{service_name}' service.
+                        Based on the following authoritative documentation context, generate one high-quality multiple-choice question (MCQ) testing knowledge of the sub-concept '{subconcept_name}' under the '{service_name}' service.
                         
                         The question must follow these strict requirements:
                         1. It must be highly relevant to the '{selected_exam}' certification.
@@ -1007,10 +1077,11 @@ with tab_quiz:
                             st.error(f"Failed to generate question: {e}")
         else:
             # Active Quiz View
+            subconcept_name = st.session_state.quiz_subconcept
             service_name = st.session_state.quiz_service
             question_data = st.session_state.quiz_question_data
             
-            st.markdown(f"### 📋 Question Topic: **{service_name}**")
+            st.markdown(f"### 📋 Question Topic: **{subconcept_name}** ({service_name})")
             st.markdown(f"*{question_data['question']}*")
             
             options_dict = question_data["options"]
@@ -1027,21 +1098,26 @@ with tab_quiz:
                         key = selected_val[0]  # Get key like 'A', 'B', etc.
                         passed = (key == question_data["correct_answer"])
                         
-                        # 1. Update Mastery in Neo4j (Service and parent domains)
-                        state_controller.update_mastery(st.session_state.user_id, service_name, passed)
-                        s_node = f"{service_name}_Service"
+                        # 1. Update Mastery in Neo4j (SubConcept, Service, and parent domains)
+                        state_controller.update_mastery(st.session_state.user_id, subconcept_name, passed)
+                        sub_node = f"{subconcept_name}_SubConcept"
                         if bbn_model:
-                            parents = sorted(list(bbn_model.get_parents(s_node)))
-                            for parent in parents:
-                                parent_domain_name = parent.replace("_Domain", "")
-                                state_controller.update_mastery(st.session_state.user_id, parent_domain_name, passed)
+                            parent_services = sorted(list(bbn_model.get_parents(sub_node)))
+                            for ps in parent_services:
+                                p_service_name = ps.replace("_Service", "")
+                                state_controller.update_mastery(st.session_state.user_id, p_service_name, passed)
+                                
+                                parents = sorted(list(bbn_model.get_parents(ps)))
+                                for parent in parents:
+                                    parent_domain_name = parent.replace("_Domain", "")
+                                    state_controller.update_mastery(st.session_state.user_id, parent_domain_name, passed)
                                 
                         # 2. Run BBN inference for posterior calculation
                         if inference:
-                            q_node = f"{service_name}_Question"
+                            q_node = f"{subconcept_name}_Question"
                             pass_state = 1 if passed else 0
                             try:
-                                posterior_mastery = inference.query(variables=[s_node], evidence={q_node: pass_state}, show_progress=False).values[1]
+                                posterior_mastery = inference.query(variables=[sub_node], evidence={q_node: pass_state}, show_progress=False).values[1]
                                 st.session_state.quiz_posterior_mastery = float(posterior_mastery)
                             except Exception:
                                 st.session_state.quiz_posterior_mastery = 0.90 if passed else 0.10

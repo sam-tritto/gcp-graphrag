@@ -40,18 +40,39 @@ GCP_EXAMS = {
             "https://cloud.google.com/kubernetes-engine/docs/concepts/configuration-overview"
         ],
         "domains": {
-            "Digital Transformation with Google Cloud": [
-                "CapEx vs. OpEx", "Total Cost of Ownership (TCO)", "Cloud Computing Models (IaaS, PaaS, SaaS)"
-            ],
-            "Innovating with Data and Google Cloud": [
-                "BigQuery", "Cloud Storage", "Cloud Spanner", "Cloud SQL", "Looker", "Vertex AI", "AutoML", "Pre-trained APIs"
-            ],
-            "Infrastructure and Application Modernization": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "App Engine", "Apigee", "Anthos", "VPC", "IAM"
-            ],
-            "Google Cloud Security and Operations": [
-                "IAM", "Cloud Armor", "Site Reliability Engineering (SRE) principles", "Service Level Objectives (SLOs/SLAs)", "Cloud Logging", "Cloud Monitoring"
-            ]
+            "Digital Transformation with Google Cloud": {
+                "CapEx vs. OpEx": ["OpEx Business Value"],
+                "Total Cost of Ownership (TCO)": ["TCO Calculation Factors"],
+                "Cloud Computing Models (IaaS, PaaS, SaaS)": ["IaaS vs PaaS vs SaaS Differences"]
+            },
+            "Innovating with Data and Google Cloud": {
+                "BigQuery": ["Serverless Analytics", "Partitioning & Clustering"],
+                "Cloud Storage": ["Storage Classes (Standard/Archive)", "Object Lifecycle Management"],
+                "Cloud Spanner": ["Horizontal Scaling", "Strong Consistency"],
+                "Cloud SQL": ["Read Replicas", "High Availability Failover"],
+                "Looker": ["LookML Governance", "Data Modeling"],
+                "Vertex AI": ["Custom Training", "Vertex Pipelines"],
+                "AutoML": ["No-code Training", "AutoML Evaluation"],
+                "Pre-trained APIs": ["Pre-trained API capabilities"]
+            },
+            "Infrastructure and Application Modernization": {
+                "Compute Engine": ["Virtual Machines", "Preemptible VMs"],
+                "Google Kubernetes Engine": ["Autopilot Cluster", "Kubernetes Pods"],
+                "Cloud Run": ["Container Deployment", "Autoscaling & Scale-to-Zero"],
+                "App Engine": ["PaaS Deployments", "Standard vs Flexible Environment"],
+                "Apigee": ["API Proxying", "API Security"],
+                "Anthos": ["Hybrid Cluster Management", "Multi-cloud Config"],
+                "VPC": ["Subnets & Routing", "Firewall Rules"],
+                "IAM": ["Roles & Permissions", "Service Accounts"]
+            },
+            "Google Cloud Security and Operations": {
+                "IAM": ["Roles & Permissions", "Service Accounts"],
+                "Cloud Armor": ["DDoS Mitigation", "WAF Security"],
+                "Site Reliability Engineering (SRE) principles": ["Toil Automation", "Blameless Postmortems"],
+                "Service Level Objectives (SLOs/SLAs)": ["Service Level Indicators (SLIs)", "Error Budgets"],
+                "Cloud Logging": ["Log Sinks", "Audit Logs"],
+                "Cloud Monitoring": ["Alerting Policies", "Metrics Dashboards"]
+            }
         }
     },
     # Associate Tier
@@ -67,18 +88,36 @@ GCP_EXAMS = {
             "https://cloud.google.com/vpc/docs/vpc"
         ],
         "domains": {
-            "Setting Up a Cloud Solution Environment": [
-                "IAM", "Compute Engine", "Cloud Storage", "Organization", "Folder", "Project", "Resource"
-            ],
-            "Deploying and Implementing a Cloud Solution": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "Cloud SQL", "App Engine", "Artifact Registry", "Node Pools"
-            ],
-            "Configuring Access and Security": [
-                "Primitive vs. Predefined vs. Custom Roles", "Service Account Key Rotation", "Workload Identity", "VPC"
-            ],
-            "Managing Operations": [
-                "Cloud Logging", "Cloud Monitoring", "Error Reporting", "Alerting Rules"
-            ]
+            "Setting Up a Cloud Solution Environment": {
+                "IAM": ["Roles & Permissions", "Service Accounts"],
+                "Compute Engine": ["Virtual Machines", "Preemptible VMs"],
+                "Cloud Storage": ["Storage Classes (Standard/Archive)", "Object Lifecycle Management"],
+                "Organization": ["Organization Node Setup"],
+                "Folder": ["Folder Level Access"],
+                "Project": ["Project Creation & Billing"],
+                "Resource": ["Resource Groupings"]
+            },
+            "Deploying and Implementing a Cloud Solution": {
+                "Compute Engine": ["Virtual Machines", "Preemptible VMs"],
+                "Google Kubernetes Engine": ["Autopilot Cluster", "Kubernetes Pods"],
+                "Cloud Run": ["Container Deployment", "Autoscaling & Scale-to-Zero"],
+                "Cloud SQL": ["Read Replicas", "High Availability Failover"],
+                "App Engine": ["PaaS Deployments", "Standard vs Flexible Environment"],
+                "Artifact Registry": ["Docker Image Storage"],
+                "Node Pools": ["Node Pool Auto-scaling"]
+            },
+            "Configuring Access and Security": {
+                "Primitive vs. Predefined vs. Custom Roles": ["IAM Role Selection"],
+                "Service Account Key Rotation": ["IAM Key Management"],
+                "Workload Identity": ["Workload Identity Configuration"],
+                "VPC": ["Subnets & Routing", "Firewall Rules"]
+            },
+            "Managing Operations": {
+                "Cloud Logging": ["Log Sinks", "Audit Logs"],
+                "Cloud Monitoring": ["Alerting Policies", "Metrics Dashboards"],
+                "Error Reporting": ["Error Grouping & Alerts"],
+                "Alerting Rules": ["Alerting Metric Thresholds"]
+            }
         }
     },
     "adp": {
@@ -92,15 +131,26 @@ GCP_EXAMS = {
             "https://cloud.google.com/looker/docs/intro"
         ],
         "domains": {
-            "Data Ingestion and Pipelines": [
-                "Cloud Storage", "Pub/Sub", "Dataflow", "Cloud Composer", "Looker Enterprise", "CSV", "JSON", "Parquet", "Avro"
-            ],
-            "Data Storage and Querying": [
-                "BigQuery", "Cloud SQL", "Datastore"
-            ],
-            "Data Analysis and Presentation": [
-                "Looker Studio", "BigQuery"
-            ]
+            "Data Ingestion and Pipelines": {
+                "Cloud Storage": ["Storage Classes (Standard/Archive)", "Object Lifecycle Management"],
+                "Pub/Sub": ["Publishers & Subscribers", "Topics & Subscriptions"],
+                "Dataflow": ["Container Deployment", "Autoscaling & Scale-to-Zero"],
+                "Cloud Composer": ["Apache Airflow Orchestration", "DAG Scheduling"],
+                "Looker Enterprise": ["LookML Governance", "Data Modeling"],
+                "CSV": ["CSV File Parsing"],
+                "JSON": ["JSON File Parsing"],
+                "Parquet": ["Parquet Columnar Format"],
+                "Avro": ["Avro Schema Evolution"]
+            },
+            "Data Storage and Querying": {
+                "BigQuery": ["Serverless Analytics", "Partitioning & Clustering"],
+                "Cloud SQL": ["Read Replicas", "High Availability Failover"],
+                "Datastore": ["NoSQL Document Storage"]
+            },
+            "Data Analysis and Presentation": {
+                "Looker Studio": ["Interactive Reports", "Dashboard Visualizations"],
+                "BigQuery": ["Serverless Analytics", "Partitioning & Clustering"]
+            }
         }
     },
     # Professional Tier
@@ -114,18 +164,43 @@ GCP_EXAMS = {
             "https://services.google.com/fh/files/misc/v6.1_pca_knightmotives_automotive_case_study_english.pdf"
         ],
         "domains": {
-            "Designing for Security and Compliance": [
-                "IAM", "VPC", "Cloud Armor", "Key Management Service", "Identity-Aware Proxy"
-            ],
-            "Designing for Reliability, Disaster Recovery, and Business Continuity": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Storage", "Cloud SQL", "Cloud Spanner", "BigQuery", "SRE principles", "Error Budgets", "Service Level Agreements (SLAs)", "Recovery Time/Point Objectives (RTO/RPO)"
-            ],
-            "Designing a Solution Infrastructure": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "App Engine", "Cloud Storage", "Shared VPC", "VPC Peering", "Cloud Interconnect", "Cloud VPN"
-            ],
-            "Active Case Studies": [
-                "EHR Healthcare", "Mountkirk Games", "Altostrat Media", "Cymbal Retail", "Knightmotives Automotive"
-            ]
+            "Designing for Security and Compliance": {
+                "IAM": ["Roles & Permissions", "Service Accounts"],
+                "VPC": ["Subnets & Routing", "Firewall Rules"],
+                "Cloud Armor": ["DDoS Mitigation", "WAF Security"],
+                "Key Management Service": ["Customer-Managed Encryption Keys"],
+                "Identity-Aware Proxy": ["IAP Access Policies"]
+            },
+            "Designing for Reliability, Disaster Recovery, and Business Continuity": {
+                "Compute Engine": ["Virtual Machines", "Preemptible VMs"],
+                "Google Kubernetes Engine": ["Autopilot Cluster", "Kubernetes Pods"],
+                "Cloud Storage": ["Storage Classes (Standard/Archive)", "Object Lifecycle Management"],
+                "Cloud SQL": ["Read Replicas", "High Availability Failover"],
+                "Cloud Spanner": ["Horizontal Scaling", "Strong Consistency"],
+                "BigQuery": ["Serverless Analytics", "Partitioning & Clustering"],
+                "SRE principles": ["Toil Automation", "Blameless Postmortems"],
+                "Error Budgets": ["Error Budget Management"],
+                "Service Level Agreements (SLAs)": ["SLA Guarantees"],
+                "Recovery Time/Point Objectives (RTO/RPO)": ["RTO & RPO Design"]
+            },
+            "Designing a Solution Infrastructure": {
+                "Compute Engine": ["Virtual Machines", "Preemptible VMs"],
+                "Google Kubernetes Engine": ["Autopilot Cluster", "Kubernetes Pods"],
+                "Cloud Run": ["Container Deployment", "Autoscaling & Scale-to-Zero"],
+                "App Engine": ["PaaS Deployments", "Standard vs Flexible Environment"],
+                "Cloud Storage": ["Storage Classes (Standard/Archive)", "Object Lifecycle Management"],
+                "Shared VPC": ["Shared VPC Hosting"],
+                "VPC Peering": ["VPC Peering Interconnections"],
+                "Cloud Interconnect": ["Dedicated Interconnect Provisioning"],
+                "Cloud VPN": ["IPsec Tunnels Configuration"]
+            },
+            "Active Case Studies": {
+                "EHR Healthcare": ["Healthcare Case Study Requirements"],
+                "Mountkirk Games": ["Gaming Case Study Requirements"],
+                "Altostrat Media": ["Media Case Study Requirements"],
+                "Cymbal Retail": ["Retail Case Study Requirements"],
+                "Knightmotives Automotive": ["Automotive Case Study Requirements"]
+            }
         }
     },
     "pde": {
@@ -140,18 +215,31 @@ GCP_EXAMS = {
             "https://cloud.google.com/spanner/docs/overview"
         ],
         "domains": {
-            "Designing Data Processing Systems": [
-                "BigQuery", "Pub/Sub", "Dataflow", "Cloud Storage", "Bigtable"
-            ],
-            "Building and Operationalizing Data Systems": [
-                "Dataproc", "Bigtable", "Cloud Spanner", "Pub/Sub", "Dataflow"
-            ],
-            "Operationalizing Machine Learning Models": [
-                "Vertex AI", "BigQuery"
-            ],
-            "Data Governance and Quality": [
-                "Cloud DLP", "Dataplex", "Data Catalog", "Authorized Views", "Row/Column-level Security"
-            ]
+            "Designing Data Processing Systems": {
+                "BigQuery": ["Serverless Analytics", "Partitioning & Clustering"],
+                "Pub/Sub": ["Publishers & Subscribers", "Topics & Subscriptions"],
+                "Dataflow": ["Container Deployment", "Autoscaling & Scale-to-Zero"],
+                "Cloud Storage": ["Storage Classes (Standard/Archive)", "Object Lifecycle Management"],
+                "Bigtable": ["Bigtable Schema Design", "Row Key Design"]
+            },
+            "Building and Operationalizing Data Systems": {
+                "Dataproc": ["Hadoop Spark Ingestion", "Dataproc Auto-scaling"],
+                "Bigtable": ["Bigtable Schema Design", "Row Key Design"],
+                "Cloud Spanner": ["Horizontal Scaling", "Strong Consistency"],
+                "Pub/Sub": ["Publishers & Subscribers", "Topics & Subscriptions"],
+                "Dataflow": ["Container Deployment", "Autoscaling & Scale-to-Zero"]
+            },
+            "Operationalizing Machine Learning Models": {
+                "Vertex AI": ["Custom Training", "Vertex Pipelines"],
+                "BigQuery": ["Serverless Analytics", "Partitioning & Clustering"]
+            },
+            "Data Governance and Quality": {
+                "Cloud DLP": ["PII Data Redaction"],
+                "Dataplex": ["Data Catalog Mesh"],
+                "Data Catalog": ["Data Lineage Tracing"],
+                "Authorized Views": ["Authorized Dataset Views"],
+                "Row/Column-level Security": ["Fine-grained BigQuery Access"]
+            }
         }
     },
     "pmle": {
@@ -165,18 +253,45 @@ GCP_EXAMS = {
             "https://cloud.google.com/dataflow/docs"
         ],
         "domains": {
-            "ML Problem Framing and Data Preparation": [
-                "Vertex AI", "Cloud Storage", "BigQuery", "CPU", "GPU", "TPU"
-            ],
-            "ML Model Development and Training": [
-                "Vertex AI", "Compute Engine", "Google Kubernetes Engine", "Custom Containers", "AutoML", "BigQuery ML", "Model Training Method"
-            ],
-            "ML Pipeline Creation and Orchestration": [
-                "Vertex AI", "Dataflow", "Artifact Registry", "Vertex AI Pipelines", "Feature Store", "Experiment Tracking", "MLOps Lifecycle"
-            ],
-            "ML Model Deployment and Monitoring": [
-                "Vertex AI", "Operations Suite", "Cloud Run", "Vertex AI Model Monitoring", "Gemini Model Evaluation", "Model Garden", "Vertex AI Agent Builder", "Vector Search", "Generative AI Platform", "Feature Attribution Drift", "Training-Serving Skew"
-            ]
+            "ML Problem Framing and Data Preparation": {
+                "Vertex AI": ["Custom Training", "Vertex Pipelines"],
+                "Cloud Storage": ["Storage Classes (Standard/Archive)", "Object Lifecycle Management"],
+                "BigQuery": ["Serverless Analytics", "Partitioning & Clustering"],
+                "CPU": ["CPU Batch Processing"],
+                "GPU": ["GPU Parallel Computing"],
+                "TPU": ["TPU Deep Learning Accelerators"]
+            },
+            "ML Model Development and Training": {
+                "Vertex AI": ["Custom Training", "Vertex Pipelines"],
+                "Compute Engine": ["Virtual Machines", "Preemptible VMs"],
+                "Google Kubernetes Engine": ["Autopilot Cluster", "Kubernetes Pods"],
+                "Custom Containers": ["Custom Training Containers"],
+                "AutoML": ["No-code Training", "AutoML Evaluation"],
+                "BigQuery ML": ["SQL Model Training"],
+                "Model Training Method": ["Training Method Selection"]
+            },
+            "ML Pipeline Creation and Orchestration": {
+                "Vertex AI": ["Custom Training", "Vertex Pipelines"],
+                "Dataflow": ["Container Deployment", "Autoscaling & Scale-to-Zero"],
+                "Artifact Registry": ["Docker Image Storage"],
+                "Vertex AI Pipelines": ["ML Pipeline Runs"],
+                "Feature Store": ["Online Feature Serving"],
+                "Experiment Tracking": ["ML Metadata Tracking"],
+                "MLOps Lifecycle": ["Model Lifecycle Governance"]
+            },
+            "ML Model Deployment and Monitoring": {
+                "Vertex AI": ["Custom Training", "Vertex Pipelines"],
+                "Operations Suite": ["Cloud Logging Monitoring"],
+                "Cloud Run": ["Container Deployment", "Autoscaling & Scale-to-Zero"],
+                "Vertex AI Model Monitoring": ["Model Drift Detection"],
+                "Gemini Model Evaluation": ["LLM ROUGE BLEU Scores"],
+                "Model Garden": ["Pre-trained Foundation Models"],
+                "Vertex AI Agent Builder": ["No-code Agent Workflows"],
+                "Vector Search": ["Approximate Nearest Neighbors Indexing"],
+                "Generative AI Platform": ["GenAI Workflows"],
+                "Feature Attribution Drift": ["Feature Skew Attribution"],
+                "Training-Serving Skew": ["Training Serving Skew Analysis"]
+            }
         }
     }
 }

@@ -97,7 +97,8 @@ def setup_schema(driver):
             ("OptimizationPattern", "description"),
             ("EvaluationMetric", "description"),
             ("HierarchyNode", "name"),
-            ("CaseStudy", "name")
+            ("CaseStudy", "name"),
+            ("SubConcept", "name")
         ]
         for label, prop in constraints:
             try:
@@ -109,7 +110,7 @@ def setup_schema(driver):
 
 
 def setup_exam_metadata(driver, exam_id, exam_name, domains_config):
-    """Seeds the Exam, Domain, and Service blueprint metadata and links them."""
+    """Seeds the Exam, Domain, Service, and SubConcept blueprint metadata and links them."""
     with driver.session() as session:
         # Create or update core Exam node
         session.run("""
@@ -118,7 +119,7 @@ def setup_exam_metadata(driver, exam_id, exam_name, domains_config):
         """, exam_id=exam_id, name=exam_name)
         
         # Loop through domains and their services
-        for domain_name, services in domains_config.items():
+        for domain_name, service_data in domains_config.items():
             session.run("""
                 MERGE (d:Domain {name: $domain_name})
                 WITH d
@@ -126,7 +127,13 @@ def setup_exam_metadata(driver, exam_id, exam_name, domains_config):
                 MERGE (e)-[:HAS_DOMAIN]->(d)
             """, exam_id=exam_id, domain_name=domain_name)
             
-            for service_name in services:
+            # Support both old format (list of services) and new format (dict of services -> subconcepts)
+            if isinstance(service_data, list):
+                services_dict = {s: [s] for s in service_data}
+            else:
+                services_dict = service_data
+                
+            for service_name, subconcepts in services_dict.items():
                 session.run("""
                     MERGE (s:Service {name: $service_name})
                     WITH s
@@ -136,6 +143,14 @@ def setup_exam_metadata(driver, exam_id, exam_name, domains_config):
                     MATCH (d:Domain {name: $domain_name})
                     MERGE (d)-[:TESTS_KNOWLEDGE_OF]->(s)
                 """, exam_id=exam_id, domain_name=domain_name, service_name=service_name)
+                
+                for sub_name in subconcepts:
+                    session.run("""
+                        MERGE (sub:SubConcept {name: $sub_name})
+                        WITH sub
+                        MATCH (s:Service {name: $service_name})
+                        MERGE (s)-[:HAS_SUBCONCEPT]->(sub)
+                    """, service_name=service_name, sub_name=sub_name)
 
 def get_stored_hash(driver, source_id):
     """Retrieves the stored content hash for a document sync status."""
@@ -299,7 +314,7 @@ class UserStateController:
         self.touch_user(user_id)
         query = """
         MATCH (u:User {id: $user_id})
-        MATCH (n) WHERE (n:Service OR n:Domain) AND n.name = $node_name
+        MATCH (n) WHERE (n:Service OR n:Domain OR n:SubConcept) AND n.name = $node_name
         MERGE (u)-[r:HAS_MASTERY]->(n)
         ON CREATE SET r.alpha = 1, r.beta = 1
         SET r.alpha = r.alpha + CASE WHEN $passed = false THEN 1 ELSE 0 END,
@@ -324,12 +339,14 @@ class UserStateController:
         self.touch_user(user_id)
         query = """
         MATCH (u:User {id: $user_id})-[r:HAS_MASTERY]->(target)
-        WHERE (target:Service OR target:Domain)
+        WHERE (target:Service OR target:Domain OR target:SubConcept)
         AND (
             EXISTS {
                 MATCH (e:Exam {id: $exam_id})-[:HAS_DOMAIN]->(target)
             } OR EXISTS {
                 MATCH (e:Exam {id: $exam_id})-[:REQUIRES_SERVICE]->(target)
+            } OR EXISTS {
+                MATCH (e:Exam {id: $exam_id})-[:REQUIRES_SERVICE]->(:Service)-[:HAS_SUBCONCEPT]->(target)
             }
         )
         SET r.alpha = 1, r.beta = 1
@@ -348,29 +365,35 @@ class UserStateController:
             session.run(query, user_id=user_id)
 
     def get_user_mastery_stats(self, user_id: str, exam_id: str):
-        """Retrieves alpha and beta values for all services and domains of an exam."""
+        """Retrieves alpha and beta values for all services, domains, and sub-concepts of an exam."""
         self.touch_user(user_id)
         query = """
         MATCH (e:Exam {id: $exam_id})
         OPTIONAL MATCH (e)-[:HAS_DOMAIN]->(d:Domain)
         OPTIONAL MATCH (d)-[:TESTS_KNOWLEDGE_OF]->(s:Service)
-        WITH DISTINCT d, s
+        OPTIONAL MATCH (s)-[:HAS_SUBCONCEPT]->(sub:SubConcept)
+        WITH DISTINCT d, s, sub
         MATCH (u:User {id: $user_id})
         OPTIONAL MATCH (u)-[rd:HAS_MASTERY]->(d)
         OPTIONAL MATCH (u)-[rs:HAS_MASTERY]->(s)
+        OPTIONAL MATCH (u)-[rsub:HAS_MASTERY]->(sub)
         RETURN 
             d.name AS domain_name, 
             rd.alpha AS domain_alpha, 
             rd.beta AS domain_beta,
             s.name AS service_name,
             rs.alpha AS service_alpha,
-            rs.beta AS service_beta
+            rs.beta AS service_beta,
+            sub.name AS sub_name,
+            rsub.alpha AS sub_alpha,
+            rsub.beta AS sub_beta
         """
         with self.driver.session() as session:
             result = session.run(query, user_id=user_id, exam_id=exam_id)
             stats = {
                 "domains": {},
-                "services": {}
+                "services": {},
+                "subconcepts": {}
             }
             for record in result:
                 d_name = record["domain_name"]
@@ -384,6 +407,12 @@ class UserStateController:
                     stats["services"][s_name] = {
                         "alpha": record["service_alpha"] if record["service_alpha"] is not None else 1,
                         "beta": record["service_beta"] if record["service_beta"] is not None else 1
+                    }
+                sub_name = record["sub_name"]
+                if sub_name:
+                    stats["subconcepts"][sub_name] = {
+                        "alpha": record["sub_alpha"] if record["sub_alpha"] is not None else 1,
+                        "beta": record["sub_beta"] if record["sub_beta"] is not None else 1
                     }
             return stats
 
@@ -607,6 +636,57 @@ def setup_third_tier_metadata(driver):
                 MERGE (p:HierarchyNode {name: $parent})
                 MERGE (s)-[:PART_OF]->(p)
             """, service=service, parent=parent)
+
+        # --- Comparative Trade-offs (Tier 4) ---
+        comparisons = [
+            ("Cloud Spanner", "Cloud SQL", "Global write scalability with strong SQL consistency", 
+             "Cloud Spanner scales horizontally across regions while maintaining transactional consistency, whereas Cloud SQL is limited to a single primary instance for writes."),
+            ("Cloud Run", "Google Kubernetes Engine", "Web applications and microservices with minimal operational overhead", 
+             "Cloud Run is serverless and scales to zero, whereas GKE requires managing node pools, cluster control planes, and Kubernetes workloads."),
+            ("BigQuery", "Cloud SQL", "Analytical queries over petabyte-scale historical datasets", 
+             "BigQuery is a serverless column-store data warehouse optimized for OLAP, whereas Cloud SQL is optimized for OLTP transaction workloads."),
+            ("BigQuery", "Cloud Spanner", "Analytical queries over petabyte-scale historical datasets", 
+             "BigQuery is serverless and optimized for OLAP analytics, whereas Cloud Spanner is optimized for high-throughput OLTP transactions."),
+            ("Cloud Storage", "Cloud SQL", "Storing massive amounts of unstructured files cost-effectively", 
+             "Cloud Storage is an object store with multiple tiered archival classes, whereas databases like Cloud SQL are far more expensive for large binary file storage."),
+            ("Vertex AI", "Compute Engine", "Unified machine learning platform with built-in MLOps pipelines", 
+             "Vertex AI manages the entire ML lifecycle (training, deploying, monitoring) out-of-the-box, whereas manual VM setups require building pipelines from scratch."),
+            ("AutoML", "Vertex AI", "Training custom models without writing machine learning code", 
+             "AutoML automatically handles feature engineering and model selection, whereas custom training on Vertex AI requires writing code and selecting hyperparameters."),
+            ("Cloud VPN", "Cloud Interconnect", "Establishing secure network connectivity quickly and at low cost", 
+             "Cloud VPN runs over public internet and configures in minutes, whereas Cloud Interconnect requires dedicated physical links and high monthly costs."),
+            ("VPC Peering", "Cloud VPN", "Connecting two virtual networks with low latency and no gateway bottlenecks", 
+             "VPC Peering routes traffic directly using internal IPs, whereas VPN tunnels require gateways that cap bandwidth and add encryption overhead.")
+        ]
+        for s1, s2, cond, reason in comparisons:
+            session.run("""
+                MERGE (sa:Service {name: $s1})
+                MERGE (sb:Service {name: $s2})
+                MERGE (sa)-[r:PREFERABLE_OVER]->(sb)
+                SET r.condition = $cond, r.reason = $reason
+            """, s1=s1, s2=s2, cond=cond, reason=reason)
+
+        # --- Prerequisites (Tier 7) ---
+        prereqs = [
+            ("Google Kubernetes Engine", "Compute Engine"),
+            ("Google Kubernetes Engine", "Artifact Registry"),
+            ("Cloud Run", "Artifact Registry"),
+            ("Looker", "BigQuery"),
+            ("Looker Studio", "BigQuery"),
+            ("Dataflow", "Cloud Storage"),
+            ("Dataproc", "Compute Engine"),
+            ("Vertex AI", "BigQuery"),
+            ("AutoML", "Cloud Storage"),
+            ("Apigee", "Cloud Run"),
+            ("Anthos", "Google Kubernetes Engine"),
+            ("Shared VPC", "VPC")
+        ]
+        for s1, s2 in prereqs:
+            session.run("""
+                MERGE (sa:Service {name: $s1})
+                MERGE (sb:Service {name: $s2})
+                MERGE (sa)-[:REQUIRES_PREREQUISITE_KNOWLEDGE_OF]->(sb)
+            """, s1=s1, s2=s2)
             
     print("Third-tier blueprint leaf nodes and relationships successfully seeded.")
 
