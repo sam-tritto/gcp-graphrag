@@ -1,0 +1,25 @@
+# Python virtual environments
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Project environment configurations
+# Ignore active environment files in the .env folder
+.env/*.env
+.env/*.local
+.env/.env.*
+# If user puts a root .env file, ignore that too
+.env
+
+# Exclude the example file so it is checked into git
+!.env/.env.example
+
+# IDEs and system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
