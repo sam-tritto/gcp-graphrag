@@ -270,9 +270,10 @@ def get_query_embedding(query_text):
         raise ValueError("GEMINI_API_KEY is not configured.")
     genai.configure(api_key=api_key)
     result = genai.embed_content(
-        model="models/text-embedding-004",
+        model="models/gemini-embedding-001",
         content=query_text,
-        task_type="retrieval_query"
+        task_type="retrieval_query",
+        output_dimensionality=768
     )
     return result.get("embedding")
 
@@ -389,6 +390,7 @@ def retrieve_troubleshooting_context(driver, service_name, exam_id):
 db_connected = False
 driver = None
 state_controller = None
+db_connection_error = None
 
 try:
     driver = get_driver()
@@ -399,6 +401,7 @@ try:
 except Exception as e:
     driver = None
     db_connected = False
+    db_connection_error = str(e)
 
 # Sidebar Navigation Panel
 with st.sidebar:
@@ -466,6 +469,8 @@ with st.sidebar:
     
     if not db_connected:
         st.warning("Please configure database credentials in the .env folder.")
+        if db_connection_error:
+            st.error(f"Neo4j Error: {db_connection_error}")
 
     # Display active blueprint details fetched dynamically from Neo4j (or local fallback)
     st.markdown("---")
@@ -916,7 +921,7 @@ with tab_quiz:
                         """
                         try:
                             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-                            model = genai.GenerativeModel('gemini-1.5-flash')
+                            model = genai.GenerativeModel('gemini-2.5-flash')
                             response = model.generate_content(
                                 prompt,
                                 generation_config={"response_mime_type": "application/json"}
@@ -1075,7 +1080,7 @@ if st.session_state.messages[-1]["role"] == "user":
                     # 3. Query Gemini model using prompt context
                     try:
                         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         
                         prompt = f"""
                         You are a professional Google Cloud Principal Architect and GCP exam tutor. 

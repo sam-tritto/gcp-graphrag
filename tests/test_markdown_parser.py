@@ -55,3 +55,16 @@ def test_render_markdown_to_html_newlines():
     text = "Line 1\nLine 2\n\nLine 3"
     html_output = render_markdown_to_html(text)
     assert "Line 1<br>Line 2<br><br>Line 3" in html_output
+
+def test_render_markdown_to_html_headers():
+    text = "# Header 1\n## Header 2\n### Header 3\n#### Header 4"
+    html_output = render_markdown_to_html(text)
+    assert "<h1 style=" in html_output
+    assert ">Header 1</h1>" in html_output
+    assert "<h2 style=" in html_output
+    assert ">Header 2</h2>" in html_output
+    assert "<h3 style=" in html_output
+    assert ">Header 3</h3>" in html_output
+    assert "<h4 style=" in html_output
+    assert ">Header 4</h4>" in html_output
+    assert "</h1><br>" not in html_output

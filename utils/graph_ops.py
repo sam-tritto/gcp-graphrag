@@ -16,13 +16,13 @@ def load_environment():
     loaded = False
     for path in env_paths:
         if path.is_file():
-            load_dotenv(path)
+            load_dotenv(path, override=True)
             loaded = True
             break
             
     if not loaded:
         # Fallback to standard dotenv loading (which traverses up)
-        load_dotenv()
+        load_dotenv(override=True)
 
 # Initialize environment configuration
 load_environment()

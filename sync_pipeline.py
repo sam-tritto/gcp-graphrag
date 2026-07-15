@@ -36,7 +36,7 @@ GCP_EXAMS = {
             "https://cloud.google.com/sql/docs/introduction",
             "https://cloud.google.com/iam/docs/overview",
             "https://cloud.google.com/run/docs/overview/what-is-cloud-run",
-            "https://cloud.google.com/kubernetes-engine/docs/concepts/what-is-gke"
+            "https://cloud.google.com/kubernetes-engine/docs/concepts/configuration-overview"
         ],
         "domains": {
             "Digital Transformation with Google Cloud": [
@@ -59,7 +59,7 @@ GCP_EXAMS = {
         "docs": [
             "https://cloud.google.com/compute/docs/concepts",
             "https://cloud.google.com/storage/docs/introduction",
-            "https://cloud.google.com/kubernetes-engine/docs/concepts/what-is-gke",
+            "https://cloud.google.com/kubernetes-engine/docs/concepts/configuration-overview",
             "https://cloud.google.com/run/docs/overview/what-is-cloud-run",
             "https://cloud.google.com/sql/docs/introduction",
             "https://cloud.google.com/iam/docs/overview",
@@ -151,7 +151,7 @@ GCP_EXAMS = {
             "https://cloud.google.com/storage/docs/introduction",
             "https://cloud.google.com/bigquery/docs/introduction",
             "https://cloud.google.com/compute/docs/concepts",
-            "https://cloud.google.com/kubernetes-engine/docs/concepts/what-is-gke",
+            "https://cloud.google.com/kubernetes-engine/docs/concepts/configuration-overview",
             "https://cloud.google.com/dataflow/docs/concepts/overview"
         ],
         "domains": {
@@ -210,9 +210,10 @@ def generate_embeddings_in_batches(chunks, batch_size=50):
         for attempt in range(max_retries):
             try:
                 result = genai.embed_content(
-                    model="models/text-embedding-004",
+                    model="models/gemini-embedding-001",
                     content=texts,
-                    task_type="retrieval_document"
+                    task_type="retrieval_document",
+                    output_dimensionality=768
                 )
                 embeddings = result.get("embedding", [])
                 break
@@ -360,11 +361,15 @@ def run_pipeline():
             
     # 1. Seed exam blueprints, domains, and service taxonomy
     for exam_id, config in GCP_EXAMS.items():
+        if exam_id != "cdl":
+            continue
         print(f"Seeding blueprint metadata for {config['name']} ({exam_id.upper()})...")
         setup_exam_metadata(driver, exam_id, config["name"], config.get("domains", {}))
         
     # 2. Sync documentation chunks for each exam
     for exam_id, config in GCP_EXAMS.items():
+        if exam_id != "cdl":
+            continue
         for doc_url in config["docs"]:
             is_pdf = doc_url.lower().endswith(".pdf")
             
