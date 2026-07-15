@@ -145,60 +145,81 @@ def delete_source_chunks(driver, source_name, exam_id=None):
         deleted_count = counters.nodes_deleted
         print(f"Cleaned up {deleted_count} stale chunks for source '{source_name}' (Exam: {exam_id}).")
 
-def insert_chunk_node(driver, chunk_uid, text, title, source, source_exam=None):
-    """Inserts a single chunk node, setting exam metadata and relationships if provided."""
+def insert_chunks_batch(driver, chunks, source_exam=None):
+    """Inserts multiple chunk nodes and links them to the exam context in a single query transaction."""
+    if not chunks:
+        return
+    
     query = """
-    MERGE (c:Chunk {uid: $uid})
-    SET c.text = $text,
-        c.title = $title,
-        c.source = $source
+    UNWIND $batches AS batch
+    MERGE (c:Chunk {uid: batch.uid})
+    SET c.text = batch.text,
+        c.title = batch.title,
+        c.source = batch.source
     """
     if source_exam:
         query += ", c.source_exam = $source_exam"
         
-    query += "\nRETURN c"
-    
     with driver.session() as session:
-        session.run(query, uid=chunk_uid, text=text, title=title, source=source, source_exam=source_exam)
+        session.run(query, batches=[{
+            "uid": chunk["chunk_id"],
+            "text": chunk["text"],
+            "title": chunk["title"],
+            "source": chunk["source"]
+        } for chunk in chunks], source_exam=source_exam)
         
         if source_exam:
-            # Connect Chunk to Exam node
-            session.run("""
-                MATCH (c:Chunk {uid: $uid})
-                MATCH (e:Exam {id: $exam_id})
-                MERGE (c)-[:RELEVANT_TO]->(e)
-            """, uid=chunk_uid, exam_id=source_exam)
+            # Link chunks to the Exam node in batch
+            rel_query = """
+            UNWIND $uids AS uid
+            MATCH (c:Chunk {uid: uid})
+            MATCH (e:Exam {id: $exam_id})
+            MERGE (c)-[:RELEVANT_TO]->(e)
+            """
+            session.run(rel_query, uids=[c["chunk_id"] for c in chunks], exam_id=source_exam)
 
-def link_chunk_to_services(driver, chunk_uid, text, all_services):
-    """Scans the text of a chunk and connects it to Service nodes using boundary matching."""
+def link_chunks_to_services_batch(driver, chunks, all_services):
+    """Scans text of multiple chunks and connects them to Service nodes in a single batch transaction."""
     import re
-    matched_services = []
-    for service_name in all_services:
-        # Match boundaries allowing punctuation next to words (e.g. Pub/Sub)
-        pattern = r'(?i)(?<![a-zA-Z0-9])' + re.escape(service_name) + r'(?![a-zA-Z0-9])'
-        if re.search(pattern, text):
-            matched_services.append(service_name)
+    batch_data = []
+    for chunk in chunks:
+        chunk_uid = chunk["chunk_id"]
+        text = chunk["text"]
+        matched_services = []
+        for service_name in all_services:
+            pattern = r'(?i)(?<![a-zA-Z0-9])' + re.escape(service_name) + r'(?![a-zA-Z0-9])'
+            if re.search(pattern, text):
+                matched_services.append(service_name)
+        if matched_services:
+            batch_data.append({
+                "uid": chunk_uid,
+                "services": matched_services
+            })
             
-    if not matched_services:
+    if not batch_data:
         return
         
     query = """
-    MATCH (c:Chunk {uid: $uid})
-    UNWIND $services AS service_name
+    UNWIND $batch_data AS item
+    MATCH (c:Chunk {uid: item.uid})
+    UNWIND item.services AS service_name
     MERGE (s:Service {name: service_name})
     MERGE (c)-[:DISCUSSES]->(s)
     """
     with driver.session() as session:
-        session.run(query, uid=chunk_uid, services=matched_services)
+        session.run(query, batch_data=batch_data)
 
-def update_chunk_embedding(driver, chunk_uid, embedding):
-    """Updates a chunk's embedding attribute."""
+def update_chunk_embeddings_batch(driver, embeddings_batch):
+    """Updates multiple chunk embeddings in a single batch transaction."""
+    if not embeddings_batch:
+        return
     query = """
-    MATCH (c:Chunk {uid: $uid})
-    SET c.embedding = $embedding
+    UNWIND $batch AS item
+    MATCH (c:Chunk {uid: item.uid})
+    SET c.embedding = item.embedding
     """
     with driver.session() as session:
-        session.run(query, uid=chunk_uid, embedding=embedding)
+        session.run(query, batch=embeddings_batch)
 
 def build_sequential_relationships(driver, source_name, exam_id=None):
     """
@@ -217,13 +238,14 @@ def build_sequential_relationships(driver, source_name, exam_id=None):
         return
         
     link_query = """
-    MATCH (c1:Chunk {uid: $uid1})
-    MATCH (c2:Chunk {uid: $uid2})
+    UNWIND $pairs AS pair
+    MATCH (c1:Chunk {uid: pair.uid1})
+    MATCH (c2:Chunk {uid: pair.uid2})
     MERGE (c1)-[:NEXT]->(c2)
     """
+    pairs = [{"uid1": uids[idx], "uid2": uids[idx+1]} for idx in range(len(uids) - 1)]
     with driver.session() as session:
-        for idx in range(len(uids) - 1):
-            session.run(link_query, uid1=uids[idx], uid2=uids[idx+1])
+        session.run(link_query, pairs=pairs)
     print(f"Created sequential NEXT relationships for {len(uids)} chunks in '{source_name}' (Exam: {exam_id}).")
 
 def ensure_vector_index(driver):

@@ -14,9 +14,9 @@ from utils.graph_ops import (
     get_stored_hash,
     set_stored_hash,
     delete_source_chunks,
-    insert_chunk_node,
-    link_chunk_to_services,
-    update_chunk_embedding,
+    insert_chunks_batch,
+    link_chunks_to_services_batch,
+    update_chunk_embeddings_batch,
     build_sequential_relationships,
     ensure_vector_index
 )
@@ -296,29 +296,23 @@ def sync_source(driver, source_key, source_name, url, exam_id, all_services, is_
     # 4. Delete stale chunks for this source and exam context
     delete_source_chunks(driver, source_name, exam_id=exam_id)
     
-    # 5. Insert raw chunks into Neo4j
-    for chunk in chunks:
-        insert_chunk_node(
-            driver,
-            chunk_uid=chunk["chunk_id"],
-            text=chunk["text"],
-            title=chunk["title"],
-            source=chunk["source"],
-            source_exam=exam_id
-        )
-        # Establish relationship to Services
-        link_chunk_to_services(driver, chunk["chunk_id"], chunk["text"], all_services)
+    # 5. Insert raw chunks into Neo4j in batch
+    insert_chunks_batch(driver, chunks, source_exam=exam_id)
+    link_chunks_to_services_batch(driver, chunks, all_services)
         
     # 6. Establish sequential NEXT relationship chain
     build_sequential_relationships(driver, source_name, exam_id=exam_id)
     
-    # 7. Generate embeddings and upload to Neo4j
+    # 7. Generate embeddings and upload to Neo4j in batch
     embedded_chunks = generate_embeddings_in_batches(chunks)
     if embedded_chunks:
         print(f"Uploading {len(embedded_chunks)} embeddings to Neo4j for '{source_name}'...")
-        for chunk in embedded_chunks:
-            if "embedding" in chunk:
-                update_chunk_embedding(driver, chunk["chunk_id"], chunk["embedding"])
+        embeddings_batch = [
+            {"uid": chunk["chunk_id"], "embedding": chunk["embedding"]}
+            for chunk in embedded_chunks
+            if "embedding" in chunk
+        ]
+        update_chunk_embeddings_batch(driver, embeddings_batch)
                 
     # 8. Record new hash configuration
     set_stored_hash(driver, stored_hash_key, current_hash)
