@@ -15,7 +15,7 @@ TARGET_DOCS = {
 }
 
 def parse_html_framework(url, source_name=None):
-    """Scrapes the Google Cloud HTML documentation pages."""
+    """Scrapes the Google Cloud HTML documentation pages, stripping DevSite wrappers."""
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
@@ -25,87 +25,90 @@ def parse_html_framework(url, source_name=None):
 
     soup = BeautifulSoup(response.text, 'html.parser')
     
+    # Strip DevSite specific navigation, header, footer, and feedback elements
+    for el in soup.find_all([
+        'nav', 'header', 'footer', 'script', 'style',
+        'devsite-header', 'devsite-footer', 'devsite-footer-utility',
+        'devsite-book-nav', 'devsite-nav', 'devsite-rating-section',
+        'devsite-feedback', 'devsite-select', 'devsite-page-rating'
+    ]):
+        el.decompose()
+        
+    import re
+    # Strip feedback/widgets by class or ID patterns
+    for el in soup.find_all(class_=re.compile(r'devsite-nav|devsite-metadata|devsite-feedback|devsite-rating|feedback-widget|header-wrapper|footer-wrapper')):
+        el.decompose()
+    
     # Dynamically resolve source name/title if not provided
     if not source_name:
         if soup.title and soup.title.string:
             source_name = soup.title.string.strip()
+            # Clean common Google Cloud page title suffixes
+            source_name = re.sub(r'\s*\|\s*Google\s*Cloud.*$', '', source_name, flags=re.IGNORECASE)
         else:
-            # Fallback to clean URL-based name
             source_name = url.split('/')[-1].replace('-', ' ').title()
             if not source_name:
                 source_name = "GCP Documentation"
                 
-    import re
     slug = re.sub(r'[^a-z0-9_]', '', source_name.lower().replace(' ', '_'))
     if not slug:
         slug = "doc"
-    
-    # Locate article content. Streamlined to avoid header/footer/side navigation noise.
-    articles = soup.find_all('article') or soup.find_all('main') or [soup]
+        
+    # Locate main content container inside DevSite layout
+    content_area = (
+        soup.find('div', class_='devsite-article-body') 
+        or soup.find('article') 
+        or soup.find('main') 
+        or soup
+    )
     
     chunks = []
     chunk_idx = 0
-    for article in articles:
-        # Divide article into sections or paragraphs to make semantic chunks
-        sections = article.find_all(['section', 'h2', 'h3'])
-        if not sections:
-            # Fallback to simple paragraph division if no logical sections
-            paragraphs = article.find_all('p')
-            temp_text = []
-            for p in paragraphs:
-                text = p.get_text(separator=' ').strip()
-                if len(text) > 100:
-                    temp_text.append(text)
-                if len(' '.join(temp_text)) > 1500:
-                    chunks.append({
-                        "source": source_name,
-                        "chunk_id": f"{slug}_p_{chunk_idx}",
-                        "title": f"{source_name} Overview",
-                        "text": ' '.join(temp_text)
-                    })
-                    temp_text = []
-                    chunk_idx += 1
-            if temp_text:
+    
+    headings = content_area.find_all(['h2', 'h3'])
+    if not headings:
+        paragraphs = content_area.find_all('p')
+        text_blocks = [p.get_text(separator=' ').strip() for p in paragraphs if len(p.get_text().strip()) > 30]
+        full_text = "\n".join(text_blocks)
+        if full_text:
+            chunks.append({
+                "source": source_name,
+                "chunk_id": f"{slug}_full",
+                "title": f"{source_name} Overview",
+                "text": full_text
+            })
+    else:
+        for heading in headings:
+            title = heading.get_text().strip()
+            text_blocks = []
+            curr = heading.next_sibling
+            while curr and curr not in headings:
+                if hasattr(curr, 'get_text'):
+                    txt = curr.get_text(separator=' ').strip()
+                    if txt:
+                        text_blocks.append(txt)
+                curr = curr.next_sibling
+                
+            combined_text = "\n".join(text_blocks).strip()
+            if len(combined_text) > 100:
                 chunks.append({
                     "source": source_name,
-                    "chunk_id": f"{slug}_p_{chunk_idx}",
-                    "title": f"{source_name} Overview",
-                    "text": ' '.join(temp_text)
+                    "chunk_id": f"{slug}_sec_{chunk_idx}",
+                    "title": f"{source_name} - {title}",
+                    "text": f"[{title}]\n{combined_text}"
                 })
-        else:
-            for section in sections:
-                # Find sibling text until next heading or section
-                title = section.get_text().strip()
-                text_blocks = []
+                chunk_idx += 1
                 
-                # Gather content under this heading/section
-                for sibling in section.next_siblings:
-                    if sibling.name in ['h1', 'h2', 'h3', 'section']:
-                        break
-                    if sibling.name in ['p', 'ul', 'ol', 'div']:
-                        txt = sibling.get_text(separator=' ').strip()
-                        if txt:
-                            text_blocks.append(txt)
-                            
-                combined_text = "\n".join(text_blocks).strip()
-                if len(combined_text) > 150:
-                    chunks.append({
-                        "source": source_name,
-                        "chunk_id": f"{slug}_sec_{chunk_idx}",
-                        "title": title,
-                        "text": f"[{title}]\n{combined_text}"
-                    })
-                    chunk_idx += 1
-                    
-    # If no chunks were extracted, fallback to a single block
     if not chunks:
-        text = soup.get_text(separator=' ').strip()
-        chunks.append({
-            "source": source_name,
-            "chunk_id": f"{slug}_fallback",
-            "title": f"{source_name} (Full Scrape)",
-            "text": text[:10000] # Limit size of full text dump
-        })
+        text = content_area.get_text(separator='\n').strip()
+        text = re.sub(r'\n+', '\n', text)
+        if len(text) > 100:
+            chunks.append({
+                "source": source_name,
+                "chunk_id": f"{slug}_fallback",
+                "title": f"{source_name} General",
+                "text": text[:20000]
+            })
         
     return chunks
 
