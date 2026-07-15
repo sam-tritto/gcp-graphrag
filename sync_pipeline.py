@@ -2,6 +2,8 @@ import os
 import hashlib
 import re
 import requests
+import time
+import google.api_core.exceptions as gcp_errors
 import google.generativeai as genai
 from utils.graph_ops import (
     load_environment,
@@ -147,6 +149,16 @@ def compute_content_hash(content_bytes):
     """Computes MD5 hash for content comparison."""
     return hashlib.md5(content_bytes).hexdigest()
 
+def chunk_text_sliding_window(text, chunk_size=1000, overlap=200):
+    """Splits raw text into readable semantic chunks with a sliding window."""
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start += (chunk_size - overlap)
+    return chunks
+
 def generate_embeddings_in_batches(chunks, batch_size=50):
     """Generates text-embedding-004 embeddings from Gemini API in batches."""
     api_key = os.getenv("GEMINI_API_KEY")
@@ -164,22 +176,41 @@ def generate_embeddings_in_batches(chunks, batch_size=50):
         texts = [c["text"] for c in batch]
         
         print(f"Generating embeddings for batch {i//batch_size + 1} ({len(batch)} chunks)...")
-        try:
-            result = genai.embed_content(
-                model="models/text-embedding-004",
-                content=texts,
-                task_type="retrieval_document"
-            )
-            embeddings = result.get("embedding", [])
+        
+        max_retries = 5
+        delay = 2  # Start with a 2-second sleep delay
+        embeddings = None
+        
+        for attempt in range(max_retries):
+            try:
+                result = genai.embed_content(
+                    model="models/text-embedding-004",
+                    content=texts,
+                    task_type="retrieval_document"
+                )
+                embeddings = result.get("embedding", [])
+                break
+            except gcp_errors.ResourceExhausted:
+                print(f"⚠️ Rate limit hit. Sleeping {delay}s (Attempt {attempt+1}/{max_retries})...")
+                time.sleep(delay)
+                delay *= 2  # Exponentially back off the request frequency
+            except Exception as e:
+                print(f"⚠️ Error during API call (Attempt {attempt+1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    raise e
+                time.sleep(delay)
+                delay *= 2
+                
+        if embeddings is None:
+            raise Exception("❌ API request failed: Gemini Free Tier rate limit exceeded or query failed.")
             
-            for idx, embedding in enumerate(embeddings):
-                chunk_copy = batch[idx].copy()
-                chunk_copy["embedding"] = embedding
-                embedded_chunks.append(chunk_copy)
-        except Exception as e:
-            print(f"Error generating embeddings for batch starting at index {i}: {e}")
+        for idx, embedding in enumerate(embeddings):
+            chunk_copy = batch[idx].copy()
+            chunk_copy["embedding"] = embedding
+            embedded_chunks.append(chunk_copy)
             
     return embedded_chunks
+
 
 def sync_source(driver, source_key, source_name, url, exam_id, all_services, is_pdf=False):
     """Performs sync operations for a single data source under the exam context."""
@@ -208,19 +239,33 @@ def sync_source(driver, source_key, source_name, url, exam_id, all_services, is_
     
     # 3. Parse chunks
     if is_pdf:
-        chunks = parse_pdf_case_study(source_key, url)
+        raw_chunks = parse_pdf_case_study(source_key, url)
     else:
-        chunks = parse_html_framework(url, source_name)
+        raw_chunks = parse_html_framework(url, source_name)
         
-    if not chunks:
+    if not raw_chunks:
         print(f"No chunks extracted from '{source_name}'. Skipping write phase.")
         return False
         
+    # Apply sliding-window text chunking to keep chunk sizes consistent
+    chunks = []
+    for rc in raw_chunks:
+        text_slices = chunk_text_sliding_window(rc["text"], chunk_size=1000, overlap=200)
+        if len(text_slices) <= 1:
+            chunks.append(rc)
+        else:
+            for idx, slice_text in enumerate(text_slices):
+                sub_chunk = rc.copy()
+                sub_chunk["chunk_id"] = f"{rc['chunk_id']}_part{idx}"
+                sub_chunk["title"] = f"{rc['title']} (Part {idx + 1})"
+                sub_chunk["text"] = slice_text
+                chunks.append(sub_chunk)
+
     # Prefix chunk IDs with exam_id to prevent collision in multi-exam schema
     for chunk in chunks:
         chunk["chunk_id"] = f"{exam_id}_{chunk['chunk_id']}"
         
-    print(f"Extracted {len(chunks)} chunks from '{source_name}'. Writing to Neo4j...")
+    print(f"Extracted and chunked into {len(chunks)} elements from '{source_name}'. Writing to Neo4j...")
     
     # 4. Delete stale chunks for this source and exam context
     delete_source_chunks(driver, source_name, exam_id=exam_id)

@@ -179,8 +179,8 @@ def link_chunk_to_services(driver, chunk_uid, text, all_services):
             if re.search(pattern, text):
                 session.run("""
                     MATCH (c:Chunk {uid: $uid})
-                    MATCH (s:Service {name: $service_name})
-                    MERGE (c)-[:EXPLAINS]->(s)
+                    MERGE (s:Service {name: $service_name})
+                    MERGE (c)-[:DISCUSSES]->(s)
                 """, uid=chunk_uid, service_name=service_name)
 
 def update_chunk_embedding(driver, chunk_uid, embedding):
