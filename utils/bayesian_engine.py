@@ -328,14 +328,14 @@ def get_overall_entropy(model, inference, latent_nodes):
         probs.extend(query_res.values)
     return calculate_entropy(probs)
 
-def generate_bbn_dot_graph(blueprint_records, user_stats, inference=None, bbn_model=None):
+def generate_bbn_dot_graph(blueprint_records, user_stats, inference=None, bbn_model=None, show_subconcepts=True, domain_filter=None, rankdir="TB"):
     """
     Constructs a DOT language string representing the Domain-Service-SubConcept hierarchy.
     Colors nodes dynamically based on current mastery (posterior or prior).
     """
     dot_lines = [
         "digraph G {",
-        '    graph [bgcolor="transparent", rankdir="TB", splines="true", nodesep="0.5", ranksep="0.6", margin="0"];',
+        f'    graph [bgcolor="transparent", rankdir="{rankdir}", splines="true", nodesep="0.5", ranksep="0.6", margin="0"];',
         '    node [fontname="sans-serif", fontsize="10", style="filled,rounded", penwidth="1.5", margin="0.15,0.1"];',
         '    edge [color="#9aa0a6", arrowsize="0.8", penwidth="1.2"];',
         ""
@@ -346,6 +346,9 @@ def generate_bbn_dot_graph(blueprint_records, user_stats, inference=None, bbn_mo
     
     for record in blueprint_records:
         d_name = record["domain"]
+        if domain_filter and domain_filter != "All Domains" and d_name != domain_filter:
+            continue
+            
         d_node = f"{d_name}_Domain"
         
         # Calculate Domain mastery
@@ -423,42 +426,43 @@ def generate_bbn_dot_graph(blueprint_records, user_stats, inference=None, bbn_mo
             edges.append(f'    "{d_node}" -> "{s_node}";')
             
             # Subconcepts
-            for sub_name in subconcepts:
-                if not sub_name:
-                    continue
-                sub_node = f"{sub_name}_SubConcept"
-                
-                # Calculate SubConcept mastery
-                p_sub = 0.5
-                if inference and bbn_model and sub_node in bbn_model.nodes():
-                    try:
-                        p_sub = float(inference.query(variables=[sub_node], show_progress=False).values[1])
-                    except Exception:
+            if show_subconcepts:
+                for sub_name in subconcepts:
+                    if not sub_name:
+                        continue
+                    sub_node = f"{sub_name}_SubConcept"
+                    
+                    # Calculate SubConcept mastery
+                    p_sub = 0.5
+                    if inference and bbn_model and sub_node in bbn_model.nodes():
+                        try:
+                            p_sub = float(inference.query(variables=[sub_node], show_progress=False).values[1])
+                        except Exception:
+                            sub_stats = user_stats.get("subconcepts", {}).get(sub_name, {"alpha": 1, "beta": 1})
+                            p_sub = sub_stats["beta"] / (sub_stats["alpha"] + sub_stats["beta"])
+                    else:
                         sub_stats = user_stats.get("subconcepts", {}).get(sub_name, {"alpha": 1, "beta": 1})
                         p_sub = sub_stats["beta"] / (sub_stats["alpha"] + sub_stats["beta"])
-                else:
-                    sub_stats = user_stats.get("subconcepts", {}).get(sub_name, {"alpha": 1, "beta": 1})
-                    p_sub = sub_stats["beta"] / (sub_stats["alpha"] + sub_stats["beta"])
+                        
+                    # Style SubConcept node (Soft light purple/blue for subconcepts)
+                    if p_sub >= 0.7:
+                        sub_fill = "#d2e3fc"
+                        sub_border = "#1a73e8"
+                    elif p_sub >= 0.3:
+                        sub_fill = "#feefc3"
+                        sub_border = "#f9ab00"
+                    else:
+                        sub_fill = "#fce8e6"
+                        sub_border = "#d93025"
+                        
+                    sub_label_escaped = html.escape(sub_name)
+                    sub_label = f"<⚙️ {sub_label_escaped}<br/><font point-size='8'>Mastery: {p_sub:.1%}</font>>"
                     
-                # Style SubConcept node (Soft light purple/blue for subconcepts)
-                if p_sub >= 0.7:
-                    sub_fill = "#d2e3fc"
-                    sub_border = "#1a73e8"
-                elif p_sub >= 0.3:
-                    sub_fill = "#feefc3"
-                    sub_border = "#f9ab00"
-                else:
-                    sub_fill = "#fce8e6"
-                    sub_border = "#d93025"
-                    
-                sub_label_escaped = html.escape(sub_name)
-                sub_label = f"<⚙️ {sub_label_escaped}<br/><font point-size='8'>Mastery: {p_sub:.1%}</font>>"
-                
-                if sub_node not in rendered_nodes:
-                    dot_lines.append(f'    "{sub_node}" [label={sub_label}, fillcolor="{sub_fill}", color="{sub_border}", fontcolor="#202124", shape="box"];')
-                    rendered_nodes.add(sub_node)
-                    
-                edges.append(f'    "{s_node}" -> "{sub_node}";')
+                    if sub_node not in rendered_nodes:
+                        dot_lines.append(f'    "{sub_node}" [label={sub_label}, fillcolor="{sub_fill}", color="{sub_border}", fontcolor="#202124", shape="box"];')
+                        rendered_nodes.add(sub_node)
+                        
+                    edges.append(f'    "{s_node}" -> "{sub_node}";')
                 
     # Deduplicate edges
     edges = sorted(list(set(edges)))

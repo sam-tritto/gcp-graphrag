@@ -887,8 +887,41 @@ with tab_quiz:
             """, unsafe_allow_html=True)
             
             if bbn_model:
+                # Visualization controls
+                with st.expander("🛠️ Mastery Graph Options", expanded=False):
+                    col_dir, col_filter, col_sub = st.columns([1.2, 2.0, 1.2])
+                    with col_dir:
+                        rankdir_sel = st.selectbox(
+                            "Orientation",
+                            options=["Top-to-Bottom", "Left-to-Right"],
+                            index=0,
+                            key="bbn_rankdir_select"
+                        )
+                        rankdir_val = "TB" if rankdir_sel == "Top-to-Bottom" else "LR"
+                    with col_filter:
+                        domain_options = ["All Domains"] + sorted(list(set(r["domain"] for r in blueprint_records)))
+                        selected_domain = st.selectbox(
+                            "Filter by Domain",
+                            options=domain_options,
+                            index=0,
+                            key="bbn_domain_filter_select"
+                        )
+                    with col_sub:
+                        show_subs = st.checkbox(
+                            "Show Sub-Concepts",
+                            value=True,
+                            key="bbn_show_subs_checkbox"
+                        )
                 try:
-                    dot_graph = generate_bbn_dot_graph(blueprint_records, user_stats, inference, bbn_model)
+                    dot_graph = generate_bbn_dot_graph(
+                        blueprint_records,
+                        user_stats,
+                        inference,
+                        bbn_model,
+                        show_subconcepts=show_subs,
+                        domain_filter=selected_domain,
+                        rankdir=rankdir_val
+                    )
                     st.graphviz_chart(dot_graph)
                 except Exception as e:
                     st.error(f"Error rendering mastery graph: {e}")
@@ -904,7 +937,8 @@ with tab_quiz:
         if not st.session_state.quiz_active:
             st.markdown("Ready for your next question? Click the button below to generate a tailored challenge.")
             if st.button("🚀 Generate Next Adaptive Question", key="quiz_generate_btn"):
-                with st.spi                    # 1. Select the next SubConcept
+                with st.spinner("Selecting target topic and generating grounded question..."):
+                    # 1. Select the next SubConcept
                     subconcept_name = None
                     service_name = None
                     if is_diagnostic and inference and candidate_questions:
