@@ -16,6 +16,7 @@ from utils.bayesian_engine import (
     get_overall_entropy,
     generate_bbn_dot_graph
 )
+from utils.markdown_parser import render_markdown_to_html
 
 # Load configuration settings
 load_environment()
@@ -627,7 +628,7 @@ with tab_chat:
             st.markdown(f"""
             <div class="chat-bubble {role_class}">
                 <strong>{"👤 User" if msg["role"] == "user" else "🤖 GCP Tutor"}:</strong><br>
-                {msg["content"]}
+                {render_markdown_to_html(msg["content"])}
             </div>
             """, unsafe_allow_html=True)
             
