@@ -13,6 +13,7 @@ __pycache__/
 .env/.env.*
 # If user puts a root .env file, ignore that too
 .env
+*.txt
 
 # Exclude the example file so it is checked into git
 !.env/.env.example
