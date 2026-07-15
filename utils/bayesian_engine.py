@@ -1,3 +1,4 @@
+import html
 import numpy as np
 from pgmpy.models import DiscreteBayesianNetwork
 from pgmpy.factors.discrete import TabularCPD
@@ -266,3 +267,94 @@ def get_overall_entropy(model, inference, latent_nodes):
         query_res = inference.query(variables=[node], show_progress=False)
         probs.extend(query_res.values)
     return calculate_entropy(probs)
+
+def generate_bbn_dot_graph(blueprint_records, user_stats, inference=None, bbn_model=None):
+    """
+    Constructs a DOT language string representing the Domain-Service hierarchy.
+    Colors nodes dynamically based on current mastery (posterior or prior).
+    """
+    dot_lines = [
+        "digraph G {",
+        '    graph [bgcolor="transparent", rankdir="TB", splines="true", nodesep="0.5", ranksep="0.6", margin="0"];',
+        '    node [fontname="sans-serif", fontsize="10", style="filled,rounded", penwidth="1.5", margin="0.15,0.1"];',
+        '    edge [color="#9aa0a6", arrowsize="0.8", penwidth="1.2"];',
+        ""
+    ]
+    
+    rendered_nodes = set()
+    edges = []
+    
+    for record in blueprint_records:
+        d_name = record["domain"]
+        d_node = f"{d_name}_Domain"
+        
+        # Calculate Domain mastery
+        p_domain = 0.5
+        if inference and bbn_model and d_node in bbn_model.nodes():
+            try:
+                p_domain = float(inference.query(variables=[d_node], show_progress=False).values[1])
+            except Exception:
+                d_stats = user_stats.get("domains", {}).get(d_name, {"alpha": 1, "beta": 1})
+                p_domain = d_stats["beta"] / (d_stats["alpha"] + d_stats["beta"])
+        else:
+            d_stats = user_stats.get("domains", {}).get(d_name, {"alpha": 1, "beta": 1})
+            p_domain = d_stats["beta"] / (d_stats["alpha"] + d_stats["beta"])
+            
+        # Style based on mastery
+        if p_domain >= 0.7:
+            d_fill = "#81c995"  # Soft Green
+            d_border = "#137333"
+        elif p_domain >= 0.3:
+            d_fill = "#fdd663"  # Soft Yellow
+            d_border = "#b06000"
+        else:
+            d_fill = "#f28b82"  # Soft Red
+            d_border = "#c5221f"
+            
+        d_label_escaped = html.escape(d_name.upper())
+        d_label = f"<<b>📚 {d_label_escaped}</b><br/><font point-size='9'>Mastery: {p_domain:.1%}</font>>"
+        
+        if d_node not in rendered_nodes:
+            dot_lines.append(f'    "{d_node}" [label={d_label}, fillcolor="{d_fill}", color="{d_border}", fontcolor="#202124", shape="box", penwidth="2.5"];')
+            rendered_nodes.add(d_node)
+            
+        for s_name in record.get("services", []):
+            if not s_name:
+                continue
+            s_node = f"{s_name}_Service"
+            
+            # Calculate Service mastery
+            p_service = 0.5
+            if inference and bbn_model and s_node in bbn_model.nodes():
+                try:
+                    p_service = float(inference.query(variables=[s_node], show_progress=False).values[1])
+                except Exception:
+                    s_stats = user_stats.get("services", {}).get(s_name, {"alpha": 1, "beta": 1})
+                    p_service = s_stats["beta"] / (s_stats["alpha"] + s_stats["beta"])
+            else:
+                s_stats = user_stats.get("services", {}).get(s_name, {"alpha": 1, "beta": 1})
+                p_service = s_stats["beta"] / (s_stats["alpha"] + s_stats["beta"])
+                
+            # Style based on mastery
+            if p_service >= 0.7:
+                s_fill = "#81c995"
+                s_border = "#137333"
+            elif p_service >= 0.3:
+                s_fill = "#fdd663"
+                s_border = "#b06000"
+            else:
+                s_fill = "#f28b82"
+                s_border = "#c5221f"
+                
+            s_label_escaped = html.escape(s_name)
+            s_label = f"<☁️ {s_label_escaped}<br/><font point-size='9'>Mastery: {p_service:.1%}</font>>"
+            
+            if s_node not in rendered_nodes:
+                dot_lines.append(f'    "{s_node}" [label={s_label}, fillcolor="{s_fill}", color="{s_border}", fontcolor="#202124", shape="box"];')
+                rendered_nodes.add(s_node)
+                
+            edges.append(f'    "{d_node}" -> "{s_node}";')
+            
+    dot_lines.extend(edges)
+    dot_lines.append("}")
+    return "\n".join(dot_lines)

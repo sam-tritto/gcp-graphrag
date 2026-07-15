@@ -13,7 +13,8 @@ from utils.bayesian_engine import (
     select_question_active_learning,
     select_domain_thompson_sampling,
     select_service_thompson_sampling,
-    get_overall_entropy
+    get_overall_entropy,
+    generate_bbn_dot_graph
 )
 
 # Load configuration settings
@@ -781,6 +782,31 @@ with tab_quiz:
         st.markdown(f"🎯 **Active Strategy:** `{phase_name}`")
         st.caption(phase_description)
         st.progress(float(max(0.0, min(1.0, 1.0 - normalized_entropy))))
+        
+        # Render BBN Mastery Network
+        with st.expander("📊 View Bayesian Mastery Network Hierarchy", expanded=True):
+            st.markdown("""
+            This network shows how domains link to services and how your mastery propagates. 
+            Mastery values are updated dynamically from quiz results using Bayesian inference.
+            """)
+            
+            # Simple color legend using HTML/CSS styling matching Google colors
+            st.markdown("""
+            <div style="display: flex; gap: 15px; font-size: 0.85rem; margin-bottom: 15px; justify-content: center;">
+                <div><span style="color: #81c995; font-size: 1.1rem;">■</span> Mastered (&ge;70%)</div>
+                <div><span style="color: #fdd663; font-size: 1.1rem;">■</span> Uncertain (30%-69%)</div>
+                <div><span style="color: #f28b82; font-size: 1.1rem;">■</span> Struggling (&lt;30%)</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if bbn_model:
+                try:
+                    dot_graph = generate_bbn_dot_graph(blueprint_records, user_stats, inference, bbn_model)
+                    st.graphviz_chart(dot_graph)
+                except Exception as e:
+                    st.error(f"Error rendering mastery graph: {e}")
+            else:
+                st.warning("Bayesian network model not loaded.")
         
         st.markdown("---")
         
