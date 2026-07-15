@@ -88,6 +88,24 @@ def setup_schema(driver):
         except Exception as e:
             print(f"Note creating Service constraint: {e}")
 
+        # 6. Unique constraints on Third-Tier nodes
+        constraints = [
+            ("UseCase", "description"),
+            ("CLICommand", "syntax"),
+            ("FunctionalRole", "description"),
+            ("Constraint", "description"),
+            ("OptimizationPattern", "description"),
+            ("EvaluationMetric", "description"),
+            ("HierarchyNode", "name"),
+            ("CaseStudy", "name")
+        ]
+        for label, prop in constraints:
+            try:
+                session.run(f"CREATE CONSTRAINT {label.lower()}_{prop} IF NOT EXISTS FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE")
+                print(f"Verified constraint: {label}({prop}) is unique.")
+            except Exception as e:
+                print(f"Note creating {label} constraint: {e}")
+
 
 
 def setup_exam_metadata(driver, exam_id, exam_name, domains_config):
@@ -368,6 +386,229 @@ class UserStateController:
                         "beta": record["service_beta"] if record["service_beta"] is not None else 1
                     }
             return stats
+
+def setup_third_tier_metadata(driver):
+    """Seeds the third-tier leaf nodes and dynamic connections for all certifications."""
+    with driver.session() as session:
+        # --- CDL UseCases ---
+        use_cases = [
+            ("Compute Engine", "Lifting and Shifting Virtual Machines with Full OS Control"),
+            ("Google Kubernetes Engine", "Managing and Scaling Containerized Microservices using Kubernetes"),
+            ("Cloud Run", "Serverless Container Execution with Scaling to Zero"),
+            ("App Engine", "PaaS Platform for Hosting Web Applications without Managing Infrastructure"),
+            ("Cloud Storage", "Unstructured Data & Cost-Effective Archiving"),
+            ("Cloud Spanner", "Global Scalability with SQL/Strong Consistency"),
+            ("BigQuery", "Serverless Enterprise Data Warehousing & Analytics"),
+            ("Cloud SQL", "Fully Managed Relational Database for MySQL, PostgreSQL, and SQL Server"),
+            ("Looker", "Governed Business Intelligence, Data Modeling, and Enterprise Reporting"),
+            ("Vertex AI", "Building, Training, and Deploying Custom Machine Learning Models"),
+            ("AutoML", "No-Code Custom Machine Learning Model Training"),
+            ("Pre-trained APIs", "Out-of-the-box ML Capabilities for Vision, Translation, and Natural Language"),
+            ("Apigee", "API Management, Governance, Security, and Analytics"),
+            ("Anthos", "Hybrid and Multi-Cloud Container Management Platform"),
+            ("VPC", "Private Cloud Networking, Subnets, and Security Controls"),
+            ("IAM", "Resource Authorization, Fine-Grained Permissions, and Access Management"),
+            ("Cloud Armor", "DDoS Protection and Web Application Firewall (WAF)"),
+            ("Site Reliability Engineering (SRE) principles", "Improving Service Reliability, Automation, and Incident Response"),
+            ("Service Level Objectives (SLOs/SLAs)", "Defining and Measuring Service Quality and Reliability Targets"),
+            ("Cloud Logging", "Centralized Log Storage, Auditing, and Real-Time Log Analysis"),
+            ("Cloud Monitoring", "Performance Dashboards, Infrastructure Metrics, and Alerting")
+        ]
+        for service, usecase in use_cases:
+            session.run("""
+                MERGE (s:Service {name: $service})
+                MERGE (u:UseCase {description: $usecase})
+                MERGE (s)-[:BEST_FOR]->(u)
+            """, service=service, usecase=usecase)
+
+        # --- ACE Operations & CLI Commands ---
+        cli_commands = [
+            ("Cloud Storage", "CONFIGURED_BY", "gsutil mb -c coldline -l us-east1 gs://bucket"),
+            ("Google Kubernetes Engine", "SCALED_BY", "kubectl scale deployment --replicas=5"),
+            ("Compute Engine", "CREATED_VIA", "gcloud compute instances create"),
+            ("Cloud Run", "DEPLOYED_VIA", "gcloud run deploy"),
+            ("Cloud SQL", "BACKED_UP_VIA", "gcloud sql backups create"),
+            ("App Engine", "DEPLOYED_VIA", "gcloud app deploy"),
+            ("IAM", "ROLES_ASSIGNED_VIA", "gcloud projects add-iam-policy-binding"),
+            ("VPC", "SUBNET_CREATED_VIA", "gcloud compute networks subnets create"),
+            ("Artifact Registry", "IMAGE_TAGGED_VIA", "docker tag & gcloud auth configure-docker"),
+            ("Node Pools", "CREATED_VIA", "gcloud container node-pools create")
+        ]
+        for service, rel, command in cli_commands:
+            session.run(f"""
+                MERGE (s:Service {{name: $service}})
+                MERGE (c:CLICommand {{syntax: $command}})
+                MERGE (s)-[:{rel}]->(c)
+            """, service=service, command=command)
+
+        # GKE specific links for ACE
+        session.run("""
+            MERGE (gke:Service {name: 'Google Kubernetes Engine'})
+            MERGE (ar:Service {name: 'Artifact Registry'})
+            MERGE (np:Service {name: 'Node Pools'})
+            MERGE (gke)-[:MAPS_TO]->(ar)
+            MERGE (gke)-[:CONFIGURES]->(np)
+        """)
+
+        # Resource Hierarchy Links for ACE
+        session.run("""
+            MERGE (org:HierarchyNode {name: 'Organization'})
+            MERGE (fld:HierarchyNode {name: 'Folder'})
+            MERGE (prj:HierarchyNode {name: 'Project'})
+            MERGE (res:HierarchyNode {name: 'Resource'})
+            MERGE (org)-[:PARENT_OF]->(fld)
+            MERGE (fld)-[:PARENT_OF]->(prj)
+            MERGE (prj)-[:PARENT_OF]->(res)
+        """)
+
+        # --- ADP Roles & Ingestion Formats ---
+        adp_roles = [
+            ("Looker Studio", "USED_FOR", "Building Interactive Business Reports & Dashboards"),
+            ("Cloud Storage", "ACTS_AS", "Raw Staging Zone for Pipeline Ingestion"),
+            ("Pub/Sub", "ACTS_AS", "Real-Time Message Ingestion & Event Bus"),
+            ("Dataflow", "USED_FOR", "ETL Pipeline Ingestion and Stream/Batch Processing"),
+            ("Cloud SQL", "USED_FOR", "Transactional Database for Structured Application Data"),
+            ("BigQuery", "USED_FOR", "Serverless Enterprise Data Warehousing & SQL Analytics"),
+            ("Cloud Composer", "USED_FOR", "Orchestrating Complex Data Pipelines using Apache Airflow DAGs"),
+            ("Looker Enterprise", "USED_FOR", "Governed Data Modeling and Single Source of Truth Reporting via LookML")
+        ]
+        for service, rel, role in adp_roles:
+            session.run(f"""
+                MERGE (s:Service {{name: $service}})
+                MERGE (f:FunctionalRole {{description: $role}})
+                MERGE (s)-[:{rel}]->(f)
+            """, service=service, role=role)
+
+        # ADP Ingestion Formats mapping
+        ingestion_mappings = [
+            ("CSV", "INGESTED_TO", "Cloud Storage"),
+            ("JSON", "INGESTED_TO", "Cloud Storage"),
+            ("Parquet", "STORED_AS", "Cloud Storage"),
+            ("Avro", "STORED_AS", "Cloud Storage"),
+            ("CSV", "LOADED_INTO", "BigQuery"),
+            ("JSON", "LOADED_INTO", "BigQuery"),
+            ("Parquet", "LOADED_INTO", "BigQuery"),
+            ("Avro", "LOADED_INTO", "BigQuery")
+        ]
+        for fmt, rel, target in ingestion_mappings:
+            session.run(f"""
+                MERGE (f:HierarchyNode {{name: $fmt}})
+                MERGE (t:Service {{name: $target}})
+                MERGE (f)-[:{rel}]->(t)
+            """, fmt=fmt, target=target)
+
+        # --- PCA SLA & Constraints & Case Studies ---
+        pca_constraints = [
+            ("Cloud Spanner", "GUARANTEES", "99.999% Availability Multi-Region SLA"),
+            ("Cloud SQL", "LIMITED_TO", "64 TB Storage Capacity"),
+            ("Cloud Spanner", "ARCHITECTED_AS", "Globally Scalable Relational Database with Strong Consistency"),
+            ("Cloud SQL", "ARCHITECTED_AS", "Regional SQL with Read Replicas"),
+            ("Compute Engine", "LIMITED_TO", "Single-Zone Virtual Machine Availability SLA (99.9% / 99.99% with HA)"),
+            ("VPC", "CONNECTS_VIA", "Shared VPC for Multi-Project Network Isolation"),
+            ("Cloud Interconnect", "PROVIDES", "Direct Dedicated Network Connection up to 100 Gbps"),
+            ("Cloud VPN", "PROVIDES", "IPsec VPN Connection over Public Internet up to 3 Gbps per tunnel"),
+            ("SRE principles", "DEFINES", "Error Budgets as the Threshold for Deploying New Features"),
+            ("Service Level Agreements (SLAs)", "MEASURED_BY", "Recovery Time Objective (RTO) & Recovery Point Objective (RPO)")
+        ]
+        for service, rel, constraint in pca_constraints:
+            session.run(f"""
+                MERGE (s:Service {{name: $service}})
+                MERGE (c:Constraint {{description: $constraint}})
+                MERGE (s)-[:{rel}]->(c)
+            """, service=service, constraint=constraint)
+
+        # PCA Case Studies
+        case_studies = [
+            ("EHR Healthcare", "Cloud Spanner"),
+            ("EHR Healthcare", "Cloud SQL"),
+            ("Mountkirk Games", "Google Kubernetes Engine"),
+            ("Mountkirk Games", "Cloud Spanner"),
+            ("Altostrat Media", "Compute Engine"),
+            ("Cymbal Retail", "Cloud Run"),
+            ("Cymbal Retail", "App Engine"),
+            ("Knightmotives Automotive", "Pub/Sub"),
+            ("Knightmotives Automotive", "BigQuery")
+        ]
+        for case_name, service in case_studies:
+            session.run("""
+                MERGE (c:CaseStudy {name: $case_name})
+                MERGE (s:Service {name: $service})
+                MERGE (c)-[:SOLVED_BY]->(s)
+            """, case_name=case_name, service=service)
+
+        # --- PDE Optimization Patterns ---
+        pde_patterns = [
+            ("BigQuery", "ACCESS_PATTERN", "Analytical & Cold Analytics"),
+            ("Cloud Bigtable", "ACCESS_PATTERN", "Low-latency & High-throughput NoSQL"),
+            ("Cloud Spanner", "ACCESS_PATTERN", "Global Transactional"),
+            ("Dataproc", "USED_FOR", "Hadoop & Spark Lift-and-Shift"),
+            ("Dataflow", "USED_FOR", "Serverless Stream & Batch Pipeline (Apache Beam) Pattern"),
+            ("BigQuery", "OPTIMIZED_BY", "Partitioning on Date Fields + Clustering on High-Cardinality Columns"),
+            ("Cloud Bigtable", "DESIGNED_USING", "Lexicographically Ordered Row Keys to Prevent Node Hotspotting"),
+            ("Cloud Spanner", "OPTIMIZED_BY", "Interleaved Tables to Physically Co-locate Parent and Child Rows"),
+            ("Cloud DLP", "USED_FOR", "De-identifying Sensitive PII Data before Processing"),
+            ("Dataplex", "USED_FOR", "Governing Data Lakes and Data Warehouses with Unified Security"),
+            ("Data Catalog", "USED_FOR", "Metadata Management and Data Lineage Tracing"),
+            ("BigQuery", "SECURED_BY", "Authorized Views"),
+            ("BigQuery", "SECURED_BY", "Row/Column-level Security")
+        ]
+        for service, rel, pattern in pde_patterns:
+            session.run(f"""
+                MERGE (s:Service {{name: $service}})
+                MERGE (p:OptimizationPattern {{description: $pattern}})
+                MERGE (s)-[:{rel}]->(p)
+            """, service=service, pattern=pattern)
+
+        # --- PMLE Metrics & Observability ---
+        pmle_metrics = [
+            ("Vertex AI Model Monitoring", "TRIGGERS_ON", "Data Drift threshold violations via K-S test"),
+            ("Gemini Model Evaluation", "MEASURED_BY", "ROUGE and BLEU scores for text summarization"),
+            ("Vertex AI Pipelines", "ORCHESTRATES", "Reproducible MLOps Workflows & Model Artifact Lineage"),
+            ("AutoML", "EVALUATED_BY", "Area Under Precision-Recall Curve (AUPRC) & Confusion Matrix"),
+            ("BigQuery ML", "EVALUATED_BY", "Mean Absolute Error (MAE) and R-Squared for Regressions"),
+            ("TPU", "REQUIRED_FOR", "Large-Scale Distributed Deep Learning Model Training (Transformer/LLM)"),
+            ("GPU", "SUITED_FOR", "Parallel Matrix Computations and Model Training/Inference"),
+            ("CPU", "SUITED_FOR", "General Purpose Compute and Lightweight Model Inference"),
+            ("Feature Attribution Drift", "MONITORED_BY", "Vertex AI Model Monitoring"),
+            ("Training-Serving Skew", "MONITORED_BY", "Vertex AI Model Monitoring")
+        ]
+        for service, rel, metric in pmle_metrics:
+            session.run(f"""
+                MERGE (s:Service {{name: $service}})
+                MERGE (m:EvaluationMetric {{description: $metric}})
+                MERGE (s)-[:{rel}]->(m)
+            """, service=service, metric=metric)
+
+        # Model Development Options grouping
+        groupings = [
+            ("Custom Containers", "Model Training Method"),
+            ("AutoML", "Model Training Method"),
+            ("BigQuery ML", "Model Training Method")
+        ]
+        for service, parent in groupings:
+            session.run("""
+                MERGE (s:Service {name: $service})
+                MERGE (p:HierarchyNode {name: $parent})
+                MERGE (s)-[:CLASSIFIED_UNDER]->(p)
+            """, service=service, parent=parent)
+
+        # ML Lifecycle vs GenAI
+        lifecycles = [
+            ("Vertex AI Pipelines", "MLOps Lifecycle"),
+            ("Feature Store", "MLOps Lifecycle"),
+            ("Experiment Tracking", "MLOps Lifecycle"),
+            ("Model Garden", "Generative AI Platform"),
+            ("Vertex AI Agent Builder", "Generative AI Platform"),
+            ("Vector Search", "Generative AI Platform")
+        ]
+        for service, parent in lifecycles:
+            session.run("""
+                MERGE (s:Service {name: $service})
+                MERGE (p:HierarchyNode {name: $parent})
+                MERGE (s)-[:PART_OF]->(p)
+            """, service=service, parent=parent)
+            
+    print("Third-tier blueprint leaf nodes and relationships successfully seeded.")
 
 
 

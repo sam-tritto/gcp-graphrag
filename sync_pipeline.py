@@ -11,6 +11,7 @@ from utils.graph_ops import (
     verify_connection,
     setup_schema,
     setup_exam_metadata,
+    setup_third_tier_metadata,
     get_stored_hash,
     set_stored_hash,
     delete_source_chunks,
@@ -40,16 +41,16 @@ GCP_EXAMS = {
         ],
         "domains": {
             "Digital Transformation with Google Cloud": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "App Engine"
+                "CapEx vs. OpEx", "Total Cost of Ownership (TCO)", "Cloud Computing Models (IaaS, PaaS, SaaS)"
             ],
             "Innovating with Data and Google Cloud": [
-                "BigQuery", "Cloud Storage", "Cloud Spanner", "Cloud SQL", "Looker"
+                "BigQuery", "Cloud Storage", "Cloud Spanner", "Cloud SQL", "Looker", "Vertex AI", "AutoML", "Pre-trained APIs"
             ],
             "Infrastructure and Application Modernization": [
-                "Compute Engine", "Google Kubernetes Engine", "VPC", "IAM"
+                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "App Engine", "Apigee", "Anthos", "VPC", "IAM"
             ],
             "Google Cloud Security and Operations": [
-                "IAM", "Operations Suite", "Cloud Armor"
+                "IAM", "Cloud Armor", "Site Reliability Engineering (SRE) principles", "Service Level Objectives (SLOs/SLAs)", "Cloud Logging", "Cloud Monitoring"
             ]
         }
     },
@@ -67,13 +68,16 @@ GCP_EXAMS = {
         ],
         "domains": {
             "Setting Up a Cloud Solution Environment": [
-                "IAM", "Compute Engine", "Cloud Storage"
+                "IAM", "Compute Engine", "Cloud Storage", "Organization", "Folder", "Project", "Resource"
             ],
             "Deploying and Implementing a Cloud Solution": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "Cloud SQL", "App Engine"
+                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "Cloud SQL", "App Engine", "Artifact Registry", "Node Pools"
             ],
             "Configuring Access and Security": [
-                "IAM", "VPC"
+                "Primitive vs. Predefined vs. Custom Roles", "Service Account Key Rotation", "Workload Identity", "VPC"
+            ],
+            "Managing Operations": [
+                "Cloud Logging", "Cloud Monitoring", "Error Reporting", "Alerting Rules"
             ]
         }
     },
@@ -83,19 +87,19 @@ GCP_EXAMS = {
             "https://cloud.google.com/bigquery/docs/introduction",
             "https://cloud.google.com/storage/docs/introduction",
             "https://cloud.google.com/pubsub/docs/overview",
-            "https://cloud.google.com/dataflow/docs/concepts/overview",
+            "https://cloud.google.com/dataflow/docs",
             "https://cloud.google.com/sql/docs/introduction",
             "https://cloud.google.com/looker/docs/intro"
         ],
         "domains": {
             "Data Ingestion and Pipelines": [
-                "Cloud Storage", "Pub/Sub", "Dataflow"
+                "Cloud Storage", "Pub/Sub", "Dataflow", "Cloud Composer", "Looker Enterprise", "CSV", "JSON", "Parquet", "Avro"
             ],
             "Data Storage and Querying": [
                 "BigQuery", "Cloud SQL", "Datastore"
             ],
-            "Data Visualization and Insights": [
-                "Looker", "BigQuery"
+            "Data Analysis and Presentation": [
+                "Looker Studio", "BigQuery"
             ]
         }
     },
@@ -114,10 +118,13 @@ GCP_EXAMS = {
                 "IAM", "VPC", "Cloud Armor", "Key Management Service", "Identity-Aware Proxy"
             ],
             "Designing for Reliability, Disaster Recovery, and Business Continuity": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Storage", "Cloud SQL", "Cloud Spanner", "BigQuery"
+                "Compute Engine", "Google Kubernetes Engine", "Cloud Storage", "Cloud SQL", "Cloud Spanner", "BigQuery", "SRE principles", "Error Budgets", "Service Level Agreements (SLAs)", "Recovery Time/Point Objectives (RTO/RPO)"
             ],
             "Designing a Solution Infrastructure": [
-                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "App Engine", "Cloud Storage"
+                "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "App Engine", "Cloud Storage", "Shared VPC", "VPC Peering", "Cloud Interconnect", "Cloud VPN"
+            ],
+            "Active Case Studies": [
+                "EHR Healthcare", "Mountkirk Games", "Altostrat Media", "Cymbal Retail", "Knightmotives Automotive"
             ]
         }
     },
@@ -126,7 +133,7 @@ GCP_EXAMS = {
         "docs": [
             "https://cloud.google.com/bigquery/docs/introduction",
             "https://cloud.google.com/pubsub/docs/overview",
-            "https://cloud.google.com/dataflow/docs/concepts/overview",
+            "https://cloud.google.com/dataflow/docs",
             "https://cloud.google.com/storage/docs/introduction",
             "https://cloud.google.com/bigtable/docs/overview",
             "https://cloud.google.com/dataproc/docs/concepts/overview",
@@ -141,6 +148,9 @@ GCP_EXAMS = {
             ],
             "Operationalizing Machine Learning Models": [
                 "Vertex AI", "BigQuery"
+            ],
+            "Data Governance and Quality": [
+                "Cloud DLP", "Dataplex", "Data Catalog", "Authorized Views", "Row/Column-level Security"
             ]
         }
     },
@@ -152,20 +162,20 @@ GCP_EXAMS = {
             "https://cloud.google.com/bigquery/docs/introduction",
             "https://cloud.google.com/compute/docs/concepts",
             "https://cloud.google.com/kubernetes-engine/docs/concepts/configuration-overview",
-            "https://cloud.google.com/dataflow/docs/concepts/overview"
+            "https://cloud.google.com/dataflow/docs"
         ],
         "domains": {
             "ML Problem Framing and Data Preparation": [
-                "Vertex AI", "Cloud Storage", "BigQuery"
+                "Vertex AI", "Cloud Storage", "BigQuery", "CPU", "GPU", "TPU"
             ],
             "ML Model Development and Training": [
-                "Vertex AI", "Compute Engine", "Google Kubernetes Engine"
+                "Vertex AI", "Compute Engine", "Google Kubernetes Engine", "Custom Containers", "AutoML", "BigQuery ML", "Model Training Method"
             ],
             "ML Pipeline Creation and Orchestration": [
-                "Vertex AI", "Dataflow", "Artifact Registry"
+                "Vertex AI", "Dataflow", "Artifact Registry", "Vertex AI Pipelines", "Feature Store", "Experiment Tracking", "MLOps Lifecycle"
             ],
             "ML Model Deployment and Monitoring": [
-                "Vertex AI", "Operations Suite", "Cloud Run"
+                "Vertex AI", "Operations Suite", "Cloud Run", "Vertex AI Model Monitoring", "Gemini Model Evaluation", "Model Garden", "Vertex AI Agent Builder", "Vector Search", "Generative AI Platform", "Feature Attribution Drift", "Training-Serving Skew"
             ]
         }
     }
@@ -361,15 +371,15 @@ def run_pipeline():
             
     # 1. Seed exam blueprints, domains, and service taxonomy
     for exam_id, config in GCP_EXAMS.items():
-        if exam_id != "cdl":
-            continue
         print(f"Seeding blueprint metadata for {config['name']} ({exam_id.upper()})...")
         setup_exam_metadata(driver, exam_id, config["name"], config.get("domains", {}))
         
+    # Seed 3rd-tier leaf nodes and relationships
+    print("Seeding third-tier metadata and scenario/architectural links...")
+    setup_third_tier_metadata(driver)
+        
     # 2. Sync documentation chunks for each exam
     for exam_id, config in GCP_EXAMS.items():
-        if exam_id != "cdl":
-            continue
         for doc_url in config["docs"]:
             is_pdf = doc_url.lower().endswith(".pdf")
             

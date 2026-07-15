@@ -301,6 +301,7 @@ def retrieve_graphrag_context(driver, query_text, exam_id):
             metadata = getattr(item, "metadata", {}) or {}
             source = metadata.get("source", "Unknown Source")
             title = metadata.get("title", "Untitled Chunk")
+            uid = metadata.get("uid", None)
             
             # Extract attributes from raw node if wrapped differently
             if not content and hasattr(item, "node"):
@@ -308,9 +309,11 @@ def retrieve_graphrag_context(driver, query_text, exam_id):
                 content = node.get("text", "")
                 source = node.get("source", "Unknown Source")
                 title = node.get("title", "Untitled Chunk")
+                uid = node.get("uid", None)
                 
             if content:
                 nodes.append({
+                    "uid": uid,
                     "content": content,
                     "source": source,
                     "title": title,
@@ -327,7 +330,7 @@ def retrieve_graphrag_context(driver, query_text, exam_id):
         CALL db.index.vector.queryNodes('gcp_exam_embeddings', 50, $embedding)
         YIELD node, score
         WHERE node.source_exam = $exam_id
-        RETURN node.text AS content, node.source AS source, node.title AS title, score
+        RETURN node.uid AS uid, node.text AS content, node.source AS source, node.title AS title, score
         LIMIT 3
         """
         nodes = []
@@ -335,6 +338,7 @@ def retrieve_graphrag_context(driver, query_text, exam_id):
             result = session.run(cypher_query, embedding=query_embedding, exam_id=exam_id)
             for record in result:
                 nodes.append({
+                    "uid": record["uid"],
                     "content": record["content"],
                     "source": record["source"],
                     "title": record["title"],
@@ -344,6 +348,50 @@ def retrieve_graphrag_context(driver, query_text, exam_id):
     except Exception as e:
         st.sidebar.error(f"Context Retrieval failed: {e}")
         return []
+
+def retrieve_third_tier_context(driver, exam_id, chunk_uids):
+    """
+    Traverses the graph to retrieve the third-tier relationships for any service nodes
+    that are discussed by the retrieved chunks.
+    """
+    if not chunk_uids:
+        return ""
+        
+    query = """
+    MATCH (c:Chunk)-[:DISCUSSES]->(s:Service)
+    WHERE c.uid IN $chunk_uids
+    
+    // Pattern 1: Service outgoing relations (e.g. BEST_FOR, CONFIGURED_BY, GUARANTEES, USED_FOR)
+    OPTIONAL MATCH (s)-[r_out]->(leaf_out)
+    WHERE NOT leaf_out:Domain AND NOT leaf_out:Exam AND NOT leaf_out:Chunk
+    
+    // Pattern 2: Incoming relations to Service (e.g. CaseStudy -SOLVED_BY-> Service, HierarchyNode -PARENT_OF-> Service, Format -INGESTED_TO-> Service)
+    OPTIONAL MATCH (leaf_in)-[r_in]->(s)
+    WHERE NOT leaf_in:Domain AND NOT leaf_in:Exam AND NOT leaf_in:Chunk
+    
+    RETURN s.name AS service, 
+           type(r_out) AS rel_out, labels(leaf_out)[0] AS label_out, coalesce(leaf_out.description, leaf_out.syntax, leaf_out.name) AS val_out,
+           type(r_in) AS rel_in, labels(leaf_in)[0] AS label_in, coalesce(leaf_in.description, leaf_in.syntax, leaf_in.name) AS val_in
+    """
+    
+    lines = set()
+    try:
+        with driver.session() as session:
+            result = session.run(query, chunk_uids=chunk_uids)
+            for record in result:
+                service = record["service"]
+                
+                # Outgoing relationship
+                if record["rel_out"] and record["label_out"] and record["val_out"]:
+                    lines.add(f"GCP Architectural Knowledge: ({service}) -[:{record['rel_out']}]-> ({record['label_out']}: \"{record['val_out']}\")")
+                
+                # Incoming relationship
+                if record["rel_in"] and record["label_in"] and record["val_in"]:
+                    lines.add(f"GCP Architectural Knowledge: ({record['label_in']}: \"{record['val_in']}\") -[:{record['rel_in']}]-> ({service})")
+    except Exception as e:
+        print(f"Error fetching third-tier context: {e}")
+        
+    return "\n".join(sorted(list(lines)))
 
 def retrieve_troubleshooting_context(driver, service_name, exam_id):
     """Retrieves troubleshooting and error resolution documentation chunks for a service."""
@@ -893,8 +941,31 @@ with tab_quiz:
                             fallback_sources = retrieve_graphrag_context(driver, f"GCP {service_name} concepts", target_exam_id)
                             context_chunks = [{"text": s["content"], "title": s["title"], "source": s["source"]} for s in fallback_sources]
                             
+                        # Fetch third-tier links for this service specifically to help Gemini formulate scenario questions testing it.
+                        third_tier_info = []
+                        try:
+                            query_3rd = """
+                            MATCH (s:Service {name: $service_name})-[r]->(leaf)
+                            WHERE NOT leaf:Domain AND NOT leaf:Exam AND NOT leaf:Chunk
+                            RETURN type(r) AS rel_type, labels(leaf)[0] AS leaf_label, 
+                                   coalesce(leaf.description, leaf.syntax, leaf.name) AS leaf_value
+                            UNION
+                            MATCH (leaf)-[r]->(s:Service {name: $service_name})
+                            WHERE NOT leaf:Domain AND NOT leaf:Exam AND NOT leaf:Chunk
+                            RETURN type(r) AS rel_type, labels(leaf)[0] AS leaf_label, 
+                                   coalesce(leaf.description, leaf.syntax, leaf.name) AS leaf_value
+                            """
+                            with driver.session() as session:
+                                res_3rd = session.run(query_3rd, service_name=service_name)
+                                for r in res_3rd:
+                                    third_tier_info.append(f"({service_name}) -[:{r['rel_type']}]-> ({r['leaf_label']}: '{r['leaf_value']}')")
+                        except Exception as e:
+                            print(f"Failed to query 3rd-tier context for quiz service: {e}")
+                            
                         # 3. Generate question using Gemini API in JSON mode
                         context_str = "\n\n".join([f"[{c['title']} - {c['source']}]\n{c['text']}" for c in context_chunks])
+                        if third_tier_info:
+                            context_str += "\n\n=== GCP STRUCTURAL BLUEPRINT RELATIONSHIPS ===\n" + "\n".join(third_tier_info)
                         prompt = f"""
                         You are a professional Google Cloud exam content creator and tutor.
                         Based on the following authoritative documentation context, generate one high-quality multiple-choice question (MCQ) testing knowledge of the '{service_name}' service.
@@ -1075,7 +1146,12 @@ if st.session_state.messages[-1]["role"] == "user":
                                 sources.extend(remediation_chunks)
                             extra_prompt = f"\n\nNOTE: The student is currently struggling with the following topic(s): {', '.join(triggered_low_services)}. Proactively address common pitfalls, explain concepts with extra pedagogical care, and focus on troubleshooting/resolution pathways."
                     
+                    chunk_uids = [item["uid"] for item in sources if item.get("uid")]
+                    third_tier_context = retrieve_third_tier_context(driver, target_exam_id, chunk_uids)
+                    
                     context_str = "\n\n".join([f"[{item['title']} - {item['source']}]\n{item['content']}" for item in sources])
+                    if third_tier_context:
+                        context_str += "\n\n=== AUTHORITATIVE GCP STRUCTURAL KNOWLEDGE (THIRD-TIER RELATIONSHIPS) ===\n" + third_tier_context
                     
                     # 3. Query Gemini model using prompt context
                     try:
