@@ -180,7 +180,7 @@ def link_chunk_to_services(driver, chunk_uid, text, all_services):
     matched_services = []
     for service_name in all_services:
         # Match boundaries allowing punctuation next to words (e.g. Pub/Sub)
-        pattern = r'(?i)(?<=^|[^a-zA-Z0-9])' + re.escape(service_name) + r'(?=$|[^a-zA-Z0-9])'
+        pattern = r'(?i)(?<![a-zA-Z0-9])' + re.escape(service_name) + r'(?![a-zA-Z0-9])'
         if re.search(pattern, text):
             matched_services.append(service_name)
             
@@ -394,7 +394,7 @@ def insert_question_node(driver, uid, question_text, options, correct_answer, ex
         matched_services = []
         combined_text = f"{question_text} {explanation}"
         for service_name in all_services:
-            pattern = r'(?i)(?<=^|[^a-zA-Z0-9])' + re.escape(service_name) + r'(?=$|[^a-zA-Z0-9])'
+            pattern = r'(?i)(?<![a-zA-Z0-9])' + re.escape(service_name) + r'(?![a-zA-Z0-9])'
             if re.search(pattern, combined_text):
                 matched_services.append(service_name)
                 
