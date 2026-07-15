@@ -834,45 +834,7 @@ with tab_quiz:
                         else:
                             st.session_state.quiz_prior_mastery = 0.50
                             
-                        # 2. Try fetching a pre-seeded Question from Neo4j
-                        seeded_question = None
-                        try:
-                            # Note: rand() is Neo4j Cypher standard for randomizing results
-                            query = """
-                            MATCH (q:Question)-[:TESTS]->(s:Service {name: $service_name})
-                            WHERE q.source_exam = $exam_id
-                            RETURN q.question AS question, q.options AS options, q.correct_answer AS correct_answer, q.explanation AS explanation
-                            ORDER BY rand()
-                            LIMIT 1
-                            """
-                            with driver.session() as session:
-                                res = session.run(query, service_name=service_name, exam_id=target_exam_id)
-                                record = res.single()
-                                if record:
-                                    options_val = record["options"]
-                                    if isinstance(options_val, str):
-                                        try:
-                                            options_dict = json.loads(options_val)
-                                        except Exception:
-                                            options_dict = options_val
-                                    else:
-                                        options_dict = options_val
-                                        
-                                    seeded_question = {
-                                        "question": record["question"],
-                                        "options": options_dict,
-                                        "correct_answer": record["correct_answer"],
-                                        "explanation": record["explanation"]
-                                    }
-                        except Exception as e:
-                            print(f"Failed to check for pre-seeded question: {e}")
-                            
-                        if seeded_question:
-                            st.session_state.quiz_question_data = seeded_question
-                            st.session_state.quiz_active = True
-                            st.session_state.quiz_submitted = False
-                            st.session_state.quiz_chunks = []
-                            st.rerun()
+
                             
                         # 3. Fetch context chunks from Neo4j (Fallback for dynamic generation)
                         context_chunks = []

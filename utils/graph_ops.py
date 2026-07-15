@@ -88,12 +88,7 @@ def setup_schema(driver):
         except Exception as e:
             print(f"Note creating Service constraint: {e}")
 
-        # 6. Unique ID constraint on Question nodes
-        try:
-            session.run("CREATE CONSTRAINT question_uid IF NOT EXISTS FOR (q:Question) REQUIRE q.uid IS UNIQUE")
-            print("Verified constraint: Question(uid) is unique.")
-        except Exception as e:
-            print(f"Note creating Question constraint: {e}")
+
 
 def setup_exam_metadata(driver, exam_id, exam_name, domains_config):
     """Seeds the Exam, Domain, and Service blueprint metadata and links them."""
@@ -352,57 +347,5 @@ class UserStateController:
                     }
             return stats
 
-def insert_question_node(driver, uid, question_text, options, correct_answer, explanation, exam_id, all_services):
-    """Inserts a Question node and connects it to the target Exam and matching Services."""
-    import re
-    import json
-    
-    # Convert options list to dict A, B, C, D if list
-    if isinstance(options, list):
-        opt_labels = ["A", "B", "C", "D"]
-        options_dict = {opt_labels[i]: options[i] for i in range(min(len(options), 4))}
-    else:
-        options_dict = options
-        
-    query = """
-    MERGE (q:Question {uid: $uid})
-    SET q.question = $question,
-        q.options = $options,
-        q.correct_answer = $correct_answer,
-        q.explanation = $explanation,
-        q.source_exam = $exam_id
-    """
-    with driver.session() as session:
-        session.run(
-            query,
-            uid=uid,
-            question=question_text,
-            options=json.dumps(options_dict) if isinstance(options_dict, dict) else options_dict,
-            correct_answer=correct_answer,
-            explanation=explanation,
-            exam_id=exam_id
-        )
-        
-        # Connect Question to Exam
-        session.run("""
-            MATCH (q:Question {uid: $uid})
-            MATCH (e:Exam {id: $exam_id})
-            MERGE (q)-[:PART_OF]->(e)
-        """, uid=uid, exam_id=exam_id)
-        
-        # Link to Services based on mentions in text/explanation
-        matched_services = []
-        combined_text = f"{question_text} {explanation}"
-        for service_name in all_services:
-            pattern = r'(?i)(?<![a-zA-Z0-9])' + re.escape(service_name) + r'(?![a-zA-Z0-9])'
-            if re.search(pattern, combined_text):
-                matched_services.append(service_name)
-                
-        if matched_services:
-            session.run("""
-                MATCH (q:Question {uid: $uid})
-                UNWIND $services AS service_name
-                MERGE (s:Service {name: service_name})
-                MERGE (q)-[:TESTS]->(s)
-            """, uid=uid, services=matched_services)
+
 

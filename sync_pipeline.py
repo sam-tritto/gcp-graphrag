@@ -18,8 +18,7 @@ from utils.graph_ops import (
     link_chunk_to_services,
     update_chunk_embedding,
     build_sequential_relationships,
-    ensure_vector_index,
-    insert_question_node
+    ensure_vector_index
 )
 from data.fetch_docs import parse_html_framework, parse_pdf_case_study
 
@@ -39,7 +38,6 @@ GCP_EXAMS = {
             "https://cloud.google.com/run/docs/overview/what-is-cloud-run",
             "https://cloud.google.com/kubernetes-engine/docs/concepts/what-is-gke"
         ],
-        "question_pools": [],
         "domains": {
             "Digital Transformation with Google Cloud": [
                 "Compute Engine", "Google Kubernetes Engine", "Cloud Run", "App Engine"
@@ -67,9 +65,6 @@ GCP_EXAMS = {
             "https://cloud.google.com/iam/docs/overview",
             "https://cloud.google.com/vpc/docs/vpc"
         ],
-        "question_pools": [
-            "https://raw.githubusercontent.com/calvinrodrigues500/gcp-ace-practice-questions/master/data.json"
-        ],
         "domains": {
             "Setting Up a Cloud Solution Environment": [
                 "IAM", "Compute Engine", "Cloud Storage"
@@ -92,7 +87,6 @@ GCP_EXAMS = {
             "https://cloud.google.com/sql/docs/introduction",
             "https://cloud.google.com/looker/docs/intro"
         ],
-        "question_pools": [],
         "domains": {
             "Data Ingestion and Pipelines": [
                 "Cloud Storage", "Pub/Sub", "Dataflow"
@@ -138,7 +132,6 @@ GCP_EXAMS = {
             "https://cloud.google.com/dataproc/docs/concepts/overview",
             "https://cloud.google.com/spanner/docs/overview"
         ],
-        "question_pools": [],
         "domains": {
             "Designing Data Processing Systems": [
                 "BigQuery", "Pub/Sub", "Dataflow", "Cloud Storage", "Bigtable"
@@ -161,7 +154,6 @@ GCP_EXAMS = {
             "https://cloud.google.com/kubernetes-engine/docs/concepts/what-is-gke",
             "https://cloud.google.com/dataflow/docs/concepts/overview"
         ],
-        "question_pools": [],
         "domains": {
             "ML Problem Framing and Data Preparation": [
                 "Vertex AI", "Cloud Storage", "BigQuery"
@@ -333,50 +325,7 @@ def sync_source(driver, source_key, source_name, url, exam_id, all_services, is_
     print(f"Successfully synchronized metadata hash state for '{source_name}' (Exam: {exam_id})!")
     return True
 
-def sync_question_pools(driver, exam_id, urls, all_services):
-    """Downloads and seeds practice exam questions from raw JSON URLs into Neo4j."""
-    print(f"\n--- Checking Question Pools for Exam {exam_id.upper()} ---")
-    for url in urls:
-        try:
-            res = requests.get(url, timeout=15)
-            res.raise_for_status()
-            content_bytes = res.content
-            current_hash = compute_content_hash(content_bytes)
-            
-            # Form unique key for stored hash
-            stored_hash_key = f"{exam_id}_qpool_{hashlib.md5(url.encode()).hexdigest()}"
-            stored_hash = get_stored_hash(driver, stored_hash_key)
-            
-            if current_hash == stored_hash:
-                print(f"No changes detected for question pool '{url}' (Exam: {exam_id}). Database is up to date.")
-                continue
-                
-            print(f"Content delta detected for question pool '{url}' (Exam: {exam_id})! Ingesting questions...")
-            questions = res.json()
-            
-            for q in questions:
-                # Convert 0-indexed correct answer integer to A, B, C, D representation
-                correct = q.get("correct")
-                if isinstance(correct, int):
-                    correct_char = chr(ord('A') + correct)
-                else:
-                    correct_char = str(correct)
-                    
-                insert_question_node(
-                    driver,
-                    uid=f"{exam_id}_pool_{q.get('id')}",
-                    question_text=q.get("question"),
-                    options=q.get("options"),
-                    correct_answer=correct_char,
-                    explanation=q.get("explanation"),
-                    exam_id=exam_id,
-                    all_services=all_services
-                )
-                
-            set_stored_hash(driver, stored_hash_key, current_hash)
-            print(f"Successfully synchronized {len(questions)} questions from pool '{url}' (Exam: {exam_id})!")
-        except Exception as e:
-            print(f"Aborting sync for question pool '{url}' (Exam: {exam_id}). Error: {e}")
+
 
 def purge_inactive_users(driver):
     """Deletes temporary portfolio user profiles older than 14 days."""
@@ -448,15 +397,7 @@ def run_pipeline():
                 is_pdf=is_pdf
             )
             
-    # 3. Sync Q&A question pools for each exam
-    for exam_id, config in GCP_EXAMS.items():
-        if config.get("question_pools"):
-            sync_question_pools(
-                driver,
-                exam_id=exam_id,
-                urls=config["question_pools"],
-                all_services=all_services
-            )
+
             
     # 4. Validate and enforce vector search index
     ensure_vector_index(driver)
