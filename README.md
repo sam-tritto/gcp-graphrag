@@ -28,6 +28,16 @@ gcp_exam_graphrag/
 
 ---
 
+## GraphRAG & Ingestion Optimization Features
+
+To ensure production-grade robustness and search accuracy, the ingestion pipeline implements three key strategies:
+
+1. **Robust Rate-Limiting & Backoff**: Wrapping embedding generation API calls to Google AI Studio in an exponential backoff retry loop to gracefully handle free-tier rate limits (`ResourceExhausted` errors).
+2. **Shared Service Taxonomy**: Chunks across all certifications are mapped to single global service nodes via a `[:DISCUSSES]` relationship. This merges documentation insights across exams, allowing GraphRAG to retrieve valuable cross-exam security and architectural insights.
+3. **Sliding-Window Chunking**: Splits large document sections and PDF pages into semantic chunks of 1000 characters with a 200-character overlap, guaranteeing consistent text lengths for optimal similarity matching.
+
+---
+
 ## Technical Stack & Costs
 
 * **Frontend UI:** Streamlit (Runs completely free on your local machine)
@@ -92,7 +102,7 @@ Ensure you have `uv` installed. If you do not have it, install it using the offi
   ```
 
 ### 2. Synchronization Pipeline Run
-To run the sync script which scrapes Google Cloud Architecture Framework one-page docs, downloads the 5 official case study PDFs, chunks them, generates text embeddings using Gemini (`text-embedding-004`), builds sequential `NEXT` relationships, and creates the Neo4j vector index:
+To run the sync script which scrapes Google Cloud Architecture Framework documentation and case study PDFs, splits them using sliding-window chunking (1000 character size / 200 character overlap), generates text embeddings using Gemini (`text-embedding-004`) with rate-limiting retries, links chunks to global service nodes via `[:DISCUSSES]`, builds sequential `NEXT` relationships, and creates the Neo4j vector index:
 ```bash
 uv run sync_pipeline.py
 ```
