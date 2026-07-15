@@ -14,16 +14,31 @@ TARGET_DOCS = {
     }
 }
 
-def parse_html_framework(url):
-    """Scrapes the Google Cloud Architecture Framework one-page documentation."""
+def parse_html_framework(url, source_name=None):
+    """Scrapes the Google Cloud HTML documentation pages."""
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
     except Exception as e:
-        print(f"Error fetching Architecture Framework from {url}: {e}")
+        print(f"Error fetching docs from {url}: {e}")
         return []
 
     soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Dynamically resolve source name/title if not provided
+    if not source_name:
+        if soup.title and soup.title.string:
+            source_name = soup.title.string.strip()
+        else:
+            # Fallback to clean URL-based name
+            source_name = url.split('/')[-1].replace('-', ' ').title()
+            if not source_name:
+                source_name = "GCP Documentation"
+                
+    import re
+    slug = re.sub(r'[^a-z0-9_]', '', source_name.lower().replace(' ', '_'))
+    if not slug:
+        slug = "doc"
     
     # Locate article content. Streamlined to avoid header/footer/side navigation noise.
     articles = soup.find_all('article') or soup.find_all('main') or [soup]
@@ -43,18 +58,18 @@ def parse_html_framework(url):
                     temp_text.append(text)
                 if len(' '.join(temp_text)) > 1500:
                     chunks.append({
-                        "source": "Architecture Framework",
-                        "chunk_id": f"fw_p_{chunk_idx}",
-                        "title": "Architecture Framework Overview",
+                        "source": source_name,
+                        "chunk_id": f"{slug}_p_{chunk_idx}",
+                        "title": f"{source_name} Overview",
                         "text": ' '.join(temp_text)
                     })
                     temp_text = []
                     chunk_idx += 1
             if temp_text:
                 chunks.append({
-                    "source": "Architecture Framework",
-                    "chunk_id": f"fw_p_{chunk_idx}",
-                    "title": "Architecture Framework Overview",
+                    "source": source_name,
+                    "chunk_id": f"{slug}_p_{chunk_idx}",
+                    "title": f"{source_name} Overview",
                     "text": ' '.join(temp_text)
                 })
         else:
@@ -75,8 +90,8 @@ def parse_html_framework(url):
                 combined_text = "\n".join(text_blocks).strip()
                 if len(combined_text) > 150:
                     chunks.append({
-                        "source": "Architecture Framework",
-                        "chunk_id": f"fw_sec_{chunk_idx}",
+                        "source": source_name,
+                        "chunk_id": f"{slug}_sec_{chunk_idx}",
                         "title": title,
                         "text": f"[{title}]\n{combined_text}"
                     })
@@ -86,9 +101,9 @@ def parse_html_framework(url):
     if not chunks:
         text = soup.get_text(separator=' ').strip()
         chunks.append({
-            "source": "Architecture Framework",
-            "chunk_id": "fw_fallback",
-            "title": "Architecture Framework (Full Scrape)",
+            "source": source_name,
+            "chunk_id": f"{slug}_fallback",
+            "title": f"{source_name} (Full Scrape)",
             "text": text[:10000] # Limit size of full text dump
         })
         

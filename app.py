@@ -4,14 +4,15 @@ import google.generativeai as genai
 from neo4j import GraphDatabase
 from neo4j_graphrag.retrievers import VectorRetriever
 from utils.graph_ops import load_environment, get_driver, verify_connection
+from sync_pipeline import GCP_EXAMS
 
 # Load configuration settings
 load_environment()
 
 # Streamlit Page Design System Setup
 st.set_page_config(
-    page_title="GCP Architect Reasoning Engine",
-    page_icon="🤖",
+    page_title="GCP Multi-Exam Reasoning Engine",
+    page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -69,12 +70,12 @@ st.markdown("""
     
     /* Main Console Workspace Card */
     .console-header-card {
-        background-color: #1e1f20;
+        background: linear-gradient(135deg, #1e1f20 0%, #17181a 100%);
         border: 1px solid #3c4043;
         border-radius: 8px;
         padding: 20px 24px;
         margin-bottom: 24px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
     
     .console-title {
@@ -134,6 +135,36 @@ st.markdown("""
         background-color: #f28b82;
     }
     
+    /* Blueprint detail cards */
+    .blueprint-card {
+        background-color: #202124;
+        border: 1px solid #3c4043;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+    }
+    .blueprint-domain {
+        color: #e3e3e3;
+        font-weight: 600;
+        font-size: 0.85rem;
+        margin-bottom: 4px;
+    }
+    .blueprint-services {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+    }
+    .service-tag {
+        background-color: rgba(138, 180, 248, 0.1);
+        border: 1px solid rgba(138, 180, 248, 0.2);
+        color: #8ab4f8;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
     /* Streamlit Sidebar Material Overrides */
     div[data-testid="stSidebar"] {
         background-color: #1e1f20 !important;
@@ -148,7 +179,7 @@ st.markdown("""
         border-radius: 12px;
         font-size: 0.95rem;
         max-width: 85%;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
     .chat-user {
         background-color: #202124;
@@ -163,7 +194,6 @@ st.markdown("""
         color: #e3e3e3;
         margin-right: auto;
         border-bottom-left-radius: 4px;
-        /* Gemini multi-color AI glow left border */
         border-left: 4px solid #8ab4f8;
         position: relative;
     }
@@ -184,6 +214,7 @@ st.markdown("""
         border-radius: 6px;
         padding: 12px 14px;
         margin: 6px 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .source-title {
         color: #8ab4f8;
@@ -215,7 +246,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # Helper function to generate query embedding from Gemini API
 def get_query_embedding(query_text):
     api_key = os.getenv("GEMINI_API_KEY")
@@ -230,11 +260,16 @@ def get_query_embedding(query_text):
     return result.get("embedding")
 
 # Core retrieval method using Neo4j-graphrag with fallback logic
-def retrieve_graphrag_context(driver, query_text):
-    # Try using Neo4j GraphRAG's VectorRetriever
+def retrieve_graphrag_context(driver, query_text, exam_id):
+    # Try using Neo4j GraphRAG's VectorRetriever with filters
     try:
         retriever = VectorRetriever(driver, index_name="gcp_exam_embeddings")
-        retrieval_results = retriever.search(query_text=query_text, top_k=3)
+        # Apply filters to restrict retrieval search space to the selected exam
+        retrieval_results = retriever.search(
+            query_text=query_text, 
+            top_k=3,
+            filters={"source_exam": exam_id}
+        )
         
         nodes = []
         for item in retrieval_results.items:
@@ -266,13 +301,15 @@ def retrieve_graphrag_context(driver, query_text):
     try:
         query_embedding = get_query_embedding(query_text)
         cypher_query = """
-        CALL db.index.vector.queryNodes('gcp_exam_embeddings', 3, $embedding)
+        CALL db.index.vector.queryNodes('gcp_exam_embeddings', 50, $embedding)
         YIELD node, score
+        WHERE node.source_exam = $exam_id
         RETURN node.text AS content, node.source AS source, node.title AS title, score
+        LIMIT 3
         """
         nodes = []
         with driver.session() as session:
-            result = session.run(cypher_query, embedding=query_embedding)
+            result = session.run(cypher_query, embedding=query_embedding, exam_id=exam_id)
             for record in result:
                 nodes.append({
                     "content": record["content"],
@@ -289,7 +326,43 @@ def retrieve_graphrag_context(driver, query_text):
 with st.sidebar:
     st.image("https://www.gstatic.com/images/branding/product/2x/google_cloud_64dp.png", width=64)
     st.markdown("### GCP Exam GraphRAG")
-    st.markdown("A lightweight tutor utilizing Neo4j graph schemas and the Gemini API for Professional Cloud Architect scenarios.")
+    st.markdown("Multi-Exam Grounded Study Assistant backed by Neo4j blueprints and Gemini 1.5 Flash.")
+    
+    st.markdown("---")
+    st.markdown("#### 📚 Active Certification")
+    selected_exam = st.selectbox(
+        "Select Your Study Path:",
+        [
+            "Cloud Digital Leader",
+            "Associate Cloud Engineer",
+            "Associate Data Practitioner",
+            "Professional Cloud Architect",
+            "Professional Data Engineer",
+            "Professional Machine Learning Engineer"
+        ]
+    )
+    
+    exam_mapping = {
+        "Cloud Digital Leader": "cdl",
+        "Associate Cloud Engineer": "ace",
+        "Associate Data Practitioner": "adp",
+        "Professional Cloud Architect": "pca",
+        "Professional Data Engineer": "pde",
+        "Professional Machine Learning Engineer": "pmle"
+    }
+    target_exam_id = exam_mapping[selected_exam]
+    
+    # Handle Study Session Switch & reset messages state
+    if "current_exam" not in st.session_state:
+        st.session_state.current_exam = target_exam_id
+        
+    if st.session_state.current_exam != target_exam_id:
+        st.session_state.current_exam = target_exam_id
+        st.session_state.messages = [{
+            "role": "assistant",
+            "content": f"Switched target study certification to **{selected_exam}**. Ask me any exam blueprint or scenario question!",
+            "sources": []
+        }]
     
     st.markdown("---")
     st.markdown("#### System Health Check")
@@ -324,21 +397,54 @@ with st.sidebar:
     if not db_connected:
         st.warning("Please configure database credentials in the .env folder.")
 
+    # Display active blueprint details fetched dynamically from Neo4j (or local fallback)
     st.markdown("---")
-    st.markdown("#### Indexed Knowledge Graph Bases")
-    st.markdown("""
-    - 📄 **Architecture Framework** (Security, Reliability, Cost, etc.)
-    - 📦 **Case Study: Altostrat Media**
-    - 🛒 **Case Study: Cymbal Retail**
-    - 🏥 **Case Study: EHR Healthcare**
-    - 🚗 **Case Study: KnightMotives Automotive**
-    """)
+    st.markdown("#### 🎯 Active Exam Blueprint")
     
+    blueprint_loaded = False
+    if db_connected and driver:
+        try:
+            query = """
+            MATCH (e:Exam {id: $exam_id})-[:HAS_DOMAIN]->(d:Domain)
+            OPTIONAL MATCH (d)-[:TESTS_KNOWLEDGE_OF]->(s:Service)
+            RETURN d.name AS domain, collect(s.name) AS services
+            ORDER BY d.name
+            """
+            with driver.session() as session:
+                result = session.run(query, exam_id=target_exam_id)
+                records = list(result)
+                if records:
+                    blueprint_loaded = True
+                    for record in records:
+                        domain = record["domain"]
+                        services = record["services"]
+                        tags_html = "".join([f'<span class="service-tag">{s}</span>' for s in services if s])
+                        st.markdown(f"""
+                        <div class="blueprint-card">
+                            <div class="blueprint-domain">📘 {domain}</div>
+                            <div class="blueprint-services">{tags_html}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+        except Exception as e:
+            pass
+            
+    # Fallback to local static registry representation if database holds no records yet
+    if not blueprint_loaded:
+        local_config = GCP_EXAMS[target_exam_id]
+        for domain, services in local_config.get("domains", {}).items():
+            tags_html = "".join([f'<span class="service-tag">{s}</span>' for s in services])
+            st.markdown(f"""
+            <div class="blueprint-card">
+                <div class="blueprint-domain">📘 {domain}</div>
+                <div class="blueprint-services">{tags_html}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
     st.markdown("---")
     st.caption("Developed using Streamlit, Neo4j, and Gemini 1.5 Flash.")
 
 # Header Component - Styled as Google Cloud Console Navbar and Title
-st.markdown("""
+st.markdown(f"""
 <div class="gcp-navbar">
     <div class="gcp-navbar-brand">
         <svg class="gcp-logo" viewBox="0 0 192 192" width="24" height="24">
@@ -356,9 +462,9 @@ st.markdown("""
 </div>
 <div class="console-header-card">
     <h2 class="console-title">
-        GCP Cloud Architecture Reasoning Engine <span class="console-title-accent">| GraphRAG</span>
+        GCP Study Reasoning Engine <span class="console-title-accent">| {selected_exam}</span>
     </h2>
-    <div class="console-subtitle">Traverse architectural pillars, service constraints, and official business scenarios in an integrated reasoning assistant. Grounded by Neo4j Aura and Gemini.</div>
+    <div class="console-subtitle">Grounded context retrieval restricted to official GCP certification resources. Currently isolating knowledge vectors tagged for <b>{target_exam_id.upper()}</b>.</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -366,7 +472,7 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
-        "content": "Hi! Provide a GCP architecture scenario, constraint, or mock question you want to analyze.",
+        "content": f"Hi! Let's study for the **{selected_exam}** certification. Ask me a scenario or study blueprint question!",
         "sources": []
     }]
 
@@ -399,7 +505,7 @@ for msg in st.session_state.messages:
                         """, unsafe_allow_html=True)
 
 # User query capture
-if user_query := st.chat_input("Ex: How should TerramEarth scale its ingestion pipeline for agricultural telemetry?"):
+if user_query := st.chat_input("Ask a question related to this certification blueprint..."):
     # Append user question
     st.session_state.messages.append({
         "role": "user",
@@ -423,8 +529,8 @@ if st.session_state.messages[-1]["role"] == "user":
                 response_text = "ERROR: Gemini API Key is missing. Please add a valid key to your configuration file."
                 sources = []
             else:
-                # 1. Retrieve context nodes from Neo4j
-                sources = retrieve_graphrag_context(driver, last_query)
+                # 1. Retrieve context nodes from Neo4j restricted to current exam
+                sources = retrieve_graphrag_context(driver, last_query, target_exam_id)
                 context_str = "\n\n".join([f"[{item['title']} - {item['source']}]\n{item['content']}" for item in sources])
                 
                 # 2. Query Gemini model using prompt context
