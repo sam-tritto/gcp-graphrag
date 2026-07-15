@@ -160,19 +160,63 @@ def select_question_active_learning(model, inference, latent_nodes, candidate_qu
     best_service = None
     min_expected_entropy = float("inf")
     
+    # 1. Prune Candidate Space: Only evaluate candidate questions for services
+    # belonging to domains where the user's current mastery is highly uncertain (entropy > 0.5).
+    domain_nodes = [node for node in latent_nodes if node.endswith("_Domain")]
+    domain_entropies = {}
+    uncertain_domains = set()
+    
+    for d_node in domain_nodes:
+        query_res = inference.query(variables=[d_node], show_progress=False)
+        ent = calculate_entropy(query_res.values)
+        domain_entropies[d_node] = ent
+        if ent > 0.5:
+            uncertain_domains.add(d_node)
+            
+    # Fallback to the domain(s) with the highest entropy if none exceed 0.5
+    if not uncertain_domains and domain_entropies:
+        max_ent = max(domain_entropies.values())
+        uncertain_domains = {d for d, ent in domain_entropies.items() if ent >= max_ent - 1e-9}
+        
+    # Filter candidate questions to services belonging to uncertain domains
+    pruned_candidates = []
     for q_node in candidate_questions:
+        s_node = q_node.replace("_Question", "_Service")
+        if s_node in model.nodes():
+            parents = model.get_parents(s_node)
+            if any(parent in uncertain_domains for parent in parents):
+                pruned_candidates.append(q_node)
+        else:
+            pruned_candidates.append(q_node)
+            
+    if not pruned_candidates:
+        pruned_candidates = candidate_questions
+        
+    # 2. Evaluate candidate questions with approximate entropy calculation
+    for q_node in pruned_candidates:
         service_name = q_node.replace("_Question", "")
         
-        # 1. Query BBN for probability of passing this question
+        # Query BBN for probability of passing this question
         query_res = inference.query(variables=[q_node], show_progress=False)
         p_pass = query_res.values[1]
         p_fail = 1.0 - p_pass
         
-        # 2. Simulate outcomes and calculate updated network entropy
-        entropy_if_passed = calculate_entropy(simulate_evidence(model, inference, latent_nodes, q_node, pass_state=1))
-        entropy_if_failed = calculate_entropy(simulate_evidence(model, inference, latent_nodes, q_node, pass_state=0))
+        # Approximate Entropy: Only query a subset of highly connected latent nodes
+        # (e.g. the service node itself and its direct parent domains)
+        s_node = q_node.replace("_Question", "_Service")
+        local_latent_nodes = [s_node]
+        if s_node in model.nodes():
+            local_latent_nodes.extend(list(model.get_parents(s_node)))
+        local_latent_nodes = [n for n in local_latent_nodes if n in latent_nodes]
         
-        # 3. Calculate Expected Entropy
+        if not local_latent_nodes:
+            local_latent_nodes = latent_nodes
+            
+        # Simulate outcomes and calculate updated local network entropy
+        entropy_if_passed = calculate_entropy(simulate_evidence(model, inference, local_latent_nodes, q_node, pass_state=1))
+        entropy_if_failed = calculate_entropy(simulate_evidence(model, inference, local_latent_nodes, q_node, pass_state=0))
+        
+        # Calculate Expected Entropy
         expected_entropy = (p_pass * entropy_if_passed) + (p_fail * entropy_if_failed)
         
         if expected_entropy < min_expected_entropy:
