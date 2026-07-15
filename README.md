@@ -1,8 +1,23 @@
 # GCP Exam Knowledge Graph & GraphRAG Chatbot
 
-An automated learning assistant designed to index official Google Cloud Architecture Framework pillars and Professional Cloud Architect (PCA) business case studies into a Neo4j Graph database, enabling a localized Streamlit Chat interface using Gemini 1.5 Flash to provide grounded, scenario-based architecture guidance.
+An automated learning assistant designed to index official Google Cloud documentation, Architecture Framework pillars, and business case studies into a Neo4j Graph database, enabling a localized Streamlit Chat interface using Gemini 1.5 Flash to provide grounded, scenario-based architecture guidance across all main Google Cloud certification paths.
 
 This project uses native graph-traversal vector queries rather than flat vector databases, ensuring the LLM understands contextual design patterns and system thresholds.
+
+---
+
+## Supported Certifications & Blueprint Paths
+
+The system seeds exam blueprint metadata and maps documentation to **six distinct Google Cloud certifications**:
+
+| Tier | Certification Name | Exam Code | Target Documentation Scraped |
+|---|---|---|---|
+| **Foundational** | [Cloud Digital Leader](https://cloud.google.com/learn/certifications/cloud-digital-leader) | `cdl` | Official GCP Docs |
+| **Associate** | [Associate Cloud Engineer](https://cloud.google.com/learn/certifications/associate-cloud-engineer) | `ace` | Official GCP Docs |
+| **Associate** | [Associate Data Practitioner](https://cloud.google.com/learn/certifications/associate-data-practitioner) | `adp` | BigQuery Docs |
+| **Professional** | [Professional Cloud Architect](https://cloud.google.com/learn/certifications/cloud-architect) | `pca` | GCP Architecture Framework, Case Study PDFs (Altostrat, Cymbal Retail, EHR Healthcare, Knightmotives) |
+| **Professional** | [Professional Data Engineer](https://cloud.google.com/learn/certifications/data-engineer) | `pde` | BigQuery & Pub/Sub Docs |
+| **Professional** | [Professional Machine Learning Engineer](https://cloud.google.com/learn/certifications/machine-learning-engineer) | `pmle` | Vertex AI Docs |
 
 ---
 
