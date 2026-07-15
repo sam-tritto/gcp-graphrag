@@ -98,7 +98,8 @@ def setup_schema(driver):
             ("EvaluationMetric", "description"),
             ("HierarchyNode", "name"),
             ("CaseStudy", "name"),
-            ("SubConcept", "name")
+            ("SubConcept", "name"),
+            ("AntiPattern", "description")
         ]
         for label, prop in constraints:
             try:
@@ -687,6 +688,27 @@ def setup_third_tier_metadata(driver):
                 MERGE (sb:Service {name: $s2})
                 MERGE (sa)-[:REQUIRES_PREREQUISITE_KNOWLEDGE_OF]->(sb)
             """, s1=s1, s2=s2)
+
+        # --- Anti-Patterns (Tier 5) ---
+        antipatterns = [
+            ("Cloud Storage", "Storing highly active daily transactional state", "Cloud SQL"),
+            ("Compute Engine", "Hardcoding database credentials inside application virtual machine images", "Secret Manager"),
+            ("IAM", "Assigning broad primitive Owner roles directly to developers in production", "IAM Custom Roles"),
+            ("Cloud VPN", "Using standard VPN tunnels for transferring petabyte-scale migration data under short deadlines", "Transfer Appliance"),
+            ("Vertex AI", "Manually copying model artifacts between projects for promotion to production", "Vertex AI Model Registry"),
+            ("BigQuery", "Querying massive tables without partitioning or clustering, causing high scan costs", "BigQuery Partitioning & Clustering"),
+            ("Compute Engine", "Running steady-state non-spiky workloads on expensive manual virtual machines without autoscaling", "Compute Engine Managed Instance Groups"),
+            ("Google Kubernetes Engine", "Storing container configuration variables inside application code rather than mounting environment details", "ConfigMaps & Secrets"),
+            ("VPC", "Exposing VM internal service ports directly to the public internet for administrator access", "Identity-Aware Proxy")
+        ]
+        for service, desc, resolution in antipatterns:
+            session.run("""
+                MERGE (s:Service {name: $service})
+                MERGE (ap:AntiPattern {description: $desc})
+                MERGE (res:Service {name: $resolution})
+                MERGE (s)-[:COMMON_PITFALL]->(ap)
+                MERGE (ap)-[:RESOLVED_BY]->(res)
+            """, service=service, desc=desc, resolution=resolution)
             
     print("Third-tier blueprint leaf nodes and relationships successfully seeded.")
 

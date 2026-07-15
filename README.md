@@ -53,6 +53,33 @@ To ensure production-grade robustness and search accuracy, the ingestion pipelin
 
 ---
 
+## Knowledge Graph Multi-Tier Architecture
+
+To support deep architectural reasoning and highly granular diagnostics, the knowledge graph is designed with a multi-tier structure:
+
+1. **Tier 4: Comparative Decision Boundaries & Trade-Offs**
+   Helps the chatbot resolve trade-off questions (e.g., *"When should I use Cloud Spanner vs. Cloud SQL?"*) by storing explicit conditional boundaries.
+   * **Relationship Pattern**: `(Service A) -[:PREFERABLE_OVER {condition: "...", reason: "..."}]-> (Service B)`
+   * **Example**: `(Cloud Spanner) -[:PREFERABLE_OVER {condition: "Global write scale & strong consistency", reason: "Scales horizontally across regions while maintaining transactional consistency"}]-> (Cloud SQL)`
+
+2. **Tier 5: Common Anti-Patterns & Pitfalls**
+   Assists in identifying architectural misconfigurations (common on Professional exams) and suggesting the correct resolutions.
+   * **Relationship Pattern**: `(Service) -[:COMMON_PITFALL]-> (AntiPattern) -[:RESOLVED_BY]-> (Service/BestPractice)`
+   * **Example**: `(Cloud Storage) -[:COMMON_PITFALL]-> (Storing highly active daily transactional state) -[:RESOLVED_BY]-> (Cloud SQL)`
+
+3. **Bayesian Belief Network (BBN) Sub-Service Concepts**
+   Upgrades the diagnostic granularity of the adaptive practice quiz beyond services to specific sub-service concepts.
+   * **Structure**: `Domain -> Service -> SubConcept -> Question`
+   * **Example**: `Data Storage & Querying -> BigQuery -> Partitioning & Clustering -> BQ_Optimization_Question`
+   * This allows the Active Learning engine to pinpoint the exact feature of a service a student struggles with.
+
+4. **Tier 7: Core Prerequisite Learning Paths**
+   Maps learning dependencies between services to construct logical educational tracks.
+   * **Relationship Pattern**: `(Service A) -[:REQUIRES_PREREQUISITE_KNOWLEDGE_OF]-> (Service B)`
+   * **Example**: `(Google Kubernetes Engine) -[:REQUIRES_PREREQUISITE_KNOWLEDGE_OF]-> (Compute Engine)`
+
+---
+
 ## Technical Stack & Costs
 
 * **Frontend UI:** Streamlit (Runs completely free on your local machine)

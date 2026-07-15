@@ -363,16 +363,20 @@ def retrieve_third_tier_context(driver, exam_id, chunk_uids):
     
     // Pattern 1: Service outgoing relations (e.g. BEST_FOR, CONFIGURED_BY, GUARANTEES, USED_FOR, PREFERABLE_OVER)
     OPTIONAL MATCH (s)-[r_out]->(leaf_out)
-    WHERE NOT leaf_out:Domain AND NOT leaf_out:Exam AND NOT leaf_out:Chunk
+    WHERE NOT leaf_out:Domain AND NOT leaf_out:Exam AND NOT leaf_out:Chunk AND NOT leaf_out:AntiPattern
     
     // Pattern 2: Incoming relations to Service
     OPTIONAL MATCH (leaf_in)-[r_in]->(s)
-    WHERE NOT leaf_in:Domain AND NOT leaf_in:Exam AND NOT leaf_in:Chunk
+    WHERE NOT leaf_in:Domain AND NOT leaf_in:Exam AND NOT leaf_in:Chunk AND NOT leaf_in:AntiPattern
+    
+    // Pattern 3: Anti-Patterns and resolutions
+    OPTIONAL MATCH (s)-[:COMMON_PITFALL]->(ap:AntiPattern)-[:RESOLVED_BY]->(res:Service)
     
     RETURN s.name AS service, 
            type(r_out) AS rel_out, labels(leaf_out)[0] AS label_out, coalesce(leaf_out.description, leaf_out.syntax, leaf_out.name) AS val_out,
            r_out.condition AS r_out_cond, r_out.reason AS r_out_reason,
-           type(r_in) AS rel_in, labels(leaf_in)[0] AS label_in, coalesce(leaf_in.description, leaf_in.syntax, leaf_in.name) AS val_in
+           type(r_in) AS rel_in, labels(leaf_in)[0] AS label_in, coalesce(leaf_in.description, leaf_in.syntax, leaf_in.name) AS val_in,
+           ap.description AS ap_desc, res.name AS ap_res
     """
     
     lines = set()
@@ -394,6 +398,10 @@ def retrieve_third_tier_context(driver, exam_id, chunk_uids):
                 # Incoming relationship
                 if record["rel_in"] and record["label_in"] and record["val_in"]:
                     lines.add(f"GCP Architectural Knowledge: ({record['label_in']}: \"{record['val_in']}\") -[:{record['rel_in']}]-> ({service})")
+                    
+                # Anti-Pattern relationship
+                if record["ap_desc"] and record["ap_res"]:
+                    lines.add(f"GCP Architectural Anti-Pattern: Using ({service}) for '{record['ap_desc']}' is an anti-pattern. RESOLUTION: Use ({record['ap_res']}) instead.")
     except Exception as e:
         print(f"Error fetching third-tier context: {e}")
         
